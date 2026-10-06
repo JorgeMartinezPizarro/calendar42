@@ -262,5 +262,6 @@ A largo plazo, la visión es construir una capa de planificación que conecte la
 |---|---|---|---:|
 | Sergio | `svalero` | Conceptualización, definición funcional y presentación | 7 h |
 | Jorge | `jomarti3` | Desarrollo e implementación técnica | 10 h |
+| Maria Fernanda | `marbecer` | - |  0h |
 
 **Repositorio:** `https://github.com/JorgeMartinezPizarro/calendar42`
