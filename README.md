@@ -4,6 +4,8 @@ Calendario para estudiantes de 42 Madrid que reúne en una única vista la infor
 
 El objetivo de Calendar42 es facilitar una **gestión eficiente del tiempo dentro de 42**, permitiendo visualizar y combinar diferentes tipos de actividad en un único calendario.
 
+![Calendar42: vista mensual, vista diaria por horas, filtros por capas y coalición del usuario en la cabecera](assets/preview.png)
+
 ## El problema
 
 Durante la experiencia en 42, la gestión del tiempo se convierte rápidamente en una parte importante de la organización del estudiante.
