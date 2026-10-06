@@ -1,0 +1,148 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 1rem 1.25rem;
+  box-sizing: border-box;
+  gap: 1rem;
+}
+
+.app__header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.app__header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.app__subtitle {
+  margin: 0;
+  opacity: 0.7;
+}
+
+.app__notice,
+.app__error {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.app__notice {
+  background: rgba(255, 159, 67, 0.2);
+  color: #ff9f43;
+}
+
+.app__error {
+  background: rgba(255, 92, 92, 0.2);
+  color: #ff5c5c;
+}
+
+.app__warning {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 159, 67, 0.2);
+  color: #ff9f43;
+  cursor: help;
+}
+
+.app__retry {
+  font: inherit;
+  font-size: 0.7rem;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.app__retry:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app__sidebar {
+  gap: 1rem;
+}
+
+.app__user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.app__avatar {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.app__logout {
+  font: inherit;
+  font-size: 0.85rem;
+  color: inherit;
+  background: transparent;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 8px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+
+.app__logout:hover {
+  border-color: #4f8cff;
+}
+
+.app__splash {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  opacity: 0.7;
+}
+
+/* Narrow screens: calendar on top, day view below with its own scroll area. */
+.app__layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.app__sidebar,
+.app__content {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__content {
+  height: 70vh;
+}
+
+.app__content > * {
+  flex: 1;
+}
+
+/* Wide screens: two columns, the calendar takes a bit more than a third and
+   the day view fills the rest of the viewport height. */
+@media (min-width: 900px) {
+  .app {
+    height: 100vh;
+  }
+
+  .app__layout {
+    grid-template-columns: minmax(340px, 38%) 1fr;
+  }
+
+  .app__content {
+    height: auto;
+  }
+}

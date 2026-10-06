@@ -1,0 +1,186 @@
+.dayview {
+  --dv-border: rgba(128, 128, 128, 0.25);
+  --dv-muted: rgba(128, 128, 128, 0.7);
+  --dv-accent: #4f8cff;
+  --dv-now: #ff5c5c;
+  --dv-hour-height: 3.5rem;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--dv-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.dayview__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--dv-border);
+}
+
+.dayview__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.dayview__badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--dv-accent);
+  color: #fff;
+}
+
+.dayview__count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--dv-muted);
+}
+
+.dayview__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Capa de eventos sobre la rejilla, a la derecha de las etiquetas de hora. */
+.dayview__events {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4rem;
+  right: 0;
+}
+
+.dayview__event {
+  --ev-color: var(--dv-accent);
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 0.25rem 0.5rem;
+  border-left: 3px solid var(--ev-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ev-color) 22%, transparent);
+  font-size: 0.8rem;
+  line-height: 1.25;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  cursor: default;
+}
+
+.dayview__event-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayview__event-meta {
+  color: var(--dv-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* El color base lo fija el tipo (--ev-color inline, ver agendaTypes.js).
+   Matices por subtipo de evento de la intra. */
+.dayview__event--kind-rush { --ev-color: #ff9f43; }
+.dayview__event--kind-hackathon { --ev-color: #2d98da; }
+.dayview__event--kind-workshop { --ev-color: #0fb9b1; }
+.dayview__event--kind-extern { --ev-color: #778ca3; }
+
+/* Slots abiertos: contorno discontinuo, son huecos disponibles, no citas. */
+.dayview__event--slot {
+  border: 1px dashed var(--ev-color);
+  border-left-width: 3px;
+  border-left-style: solid;
+  background: color-mix(in srgb, var(--ev-color) 10%, transparent);
+}
+
+/* Correcciones ya realizadas. */
+.dayview__event--done {
+  opacity: 0.55;
+}
+
+/* Elementos en los que el usuario está inscrito: relleno más fuerte y marca. */
+.dayview__event--mine {
+  background: color-mix(in srgb, var(--ev-color) 38%, transparent);
+  border-left-width: 4px;
+}
+
+.dayview__event-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: var(--ev-color);
+  color: #fff;
+  font-size: 0.65rem;
+  vertical-align: text-bottom;
+}
+
+.dayview__hours {
+  position: relative;
+}
+
+.dayview__hour {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  height: var(--dv-hour-height);
+  border-top: 1px solid var(--dv-border);
+}
+
+.dayview__hour:first-child {
+  border-top: none;
+}
+
+.dayview__hour-label {
+  font-size: 0.75rem;
+  color: var(--dv-muted);
+  text-align: right;
+  padding: 0.25rem 0.5rem 0 0;
+  border-right: 1px solid var(--dv-border);
+}
+
+.dayview__hour-slot {
+  position: relative;
+}
+
+.dayview__hour-slot::after {
+  /* half-hour guide line */
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--dv-border);
+  opacity: 0.6;
+}
+
+.dayview__now {
+  position: absolute;
+  left: 4rem;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--dv-now);
+  pointer-events: none;
+}
+
+.dayview__now::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dv-now);
+}

@@ -1,0 +1,133 @@
+.calendar {
+  --cal-border: rgba(128, 128, 128, 0.25);
+  --cal-muted: rgba(128, 128, 128, 0.7);
+  --cal-accent: #4f8cff;
+  --cal-accent-soft: rgba(79, 140, 255, 0.18);
+
+  border: 1px solid var(--cal-border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.calendar__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.calendar__title {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.calendar__header button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--cal-border);
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.calendar__header button:hover {
+  border-color: var(--cal-accent);
+}
+
+.calendar__weekdays,
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar__weekday {
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--cal-muted);
+  padding-bottom: 0.5rem;
+}
+
+.calendar__day {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  aspect-ratio: 1;
+  min-height: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0.35rem;
+  cursor: pointer;
+}
+
+.calendar__day:hover {
+  background: var(--cal-accent-soft);
+}
+
+.calendar__day--outside {
+  color: var(--cal-muted);
+  opacity: 0.6;
+}
+
+.calendar__day-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+}
+
+.calendar__day--today .calendar__day-number {
+  background: var(--cal-accent);
+  color: #fff;
+}
+
+.calendar__day--selected {
+  border-color: var(--cal-accent);
+  background: var(--cal-accent-soft);
+}
+
+/* Subrayado bajo el número: una barra por tipo de elemento presente ese día. */
+.calendar__marks {
+  display: flex;
+  gap: 2px;
+  width: 1.6rem;
+  justify-content: center;
+}
+
+.calendar__mark {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  opacity: 0.5;
+}
+
+/* Hay algo de ese tipo en lo que el usuario está inscrito (o es personal). */
+.calendar__mark--mine {
+  opacity: 1;
+  height: 4px;
+}
+
+.calendar__day:focus-visible {
+  outline: 2px solid var(--cal-accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 640px) {
+  .calendar__day {
+    min-height: 3rem;
+    aspect-ratio: auto;
+  }
+}
