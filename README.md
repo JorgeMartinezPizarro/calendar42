@@ -1,8 +1,8 @@
 # Calendar42
 
-Calendario para estudiantes de 42 Madrid que reúne en una única vista la información temporal que la intra distribuye en diferentes apartados: eventos y exámenes, slots de corrección y correcciones planificadas.
+**Calendar42 es una capa de planificación temporal sobre 42 Madrid.**
 
-El objetivo de Calendar42 es facilitar una **gestión eficiente del tiempo dentro de 42**, permitiendo visualizar y combinar diferentes tipos de actividad en un único calendario.
+La información que un estudiante necesita para organizar su tiempo ya existe en la intra, pero está distribuida entre diferentes apartados. Calendar42 nace para reunirla en una única experiencia de calendario y facilitar una visión global de cómo encajan las distintas actividades de 42.
 
 ![Calendar42: vista mensual, vista diaria por horas, filtros por capas y coalición del usuario en la cabecera](assets/preview.png)
 
@@ -12,66 +12,78 @@ Durante la experiencia en 42, la gestión del tiempo se convierte rápidamente e
 
 La idea de Calendar42 surgió a partir de la experiencia en la **Discovery de Python** y, posteriormente, en la **Piscina**, donde organizar los tiempos de estudio y de corrección resulta especialmente importante.
 
-La información necesaria para organizarse está repartida por diferentes apartados de la intra:
+Hoy, para organizarse, el estudiante tiene que consultar información repartida por diferentes apartados de la intra, como:
 
 - eventos;
-- eventos a los que está inscrito el usuario;
-- slots que un estudiante ofrece para corregir;
-- correcciones planificadas;
-- exámenes.
+- eventos en los que está inscrito;
+- exámenes;
+- slots de corrección;
+- correcciones planificadas.
 
-La intra dispone de una vista de calendario para los eventos, pero la información necesaria para organizar realmente el tiempo no está reunida en una única vista.
+La intra ya ofrece información de calendario, pero el reto que identificamos es diferente: **tener una visión temporal unificada que permita entender cómo encajan todas esas actividades entre sí**.
 
-Esto puede provocar situaciones como **reservar una corrección en un horario en el que existe un evento al que se quiere asistir**.
+Por ejemplo, un estudiante puede querer asistir a un evento y, al mismo tiempo, estar pensando en reservar una corrección o aprovechar un horario para estudiar. Cuanto más dispersa está la información, más difícil resulta tomar esa decisión de un vistazo.
 
-El problema identificado es, por tanto, un problema de **gestión eficiente del tiempo**: la información existe, pero está fragmentada y resulta difícil obtener una visión global de cómo encajan todas las actividades entre sí.
-
-La necesidad es especialmente visible en las primeras etapas de 42, cuando el estudiante todavía está descubriendo la plataforma y aprendiendo a organizarse. Pero la actividad de la escuela también incorpora cada vez más eventos, hackathons y oportunidades de interacción con empresas, por lo que disponer de una visión temporal unificada sigue teniendo valor a medida que el estudiante avanza.
+El problema que Calendar42 intenta resolver es, por tanto, un problema de **gestión eficiente del tiempo dentro de 42**.
 
 ## La solución
 
-**Calendar42** crea una capa de calendario sobre la información de la intra y la reúne en una única vista.
+**Calendar42 reúne la información temporal de 42 en una única interfaz de calendario.**
 
-El usuario puede conocer de un vistazo:
+La propuesta se basa en una idea sencilla:
 
-- qué eventos ofrece 42;
-- a qué eventos está apuntado;
-- qué exámenes tiene;
-- qué slots tiene abiertos para corregir;
-- qué correcciones tiene planificadas;
-- y cómo se solapan todas estas actividades.
+> **Una vista. Diferentes capas. Mejor planificación.**
 
-La información se organiza mediante **capas activables y desactivables**.
+El calendario permite trabajar visualmente con diferentes categorías de información para que el estudiante pueda entender su agenda sin tener que saltar constantemente entre diferentes apartados de la intra.
 
-El objetivo no es sustituir la intra, sino crear una **capa de planificación temporal** sobre la información de 42.
+El objetivo no es sustituir la intra, sino crear una **capa de planificación temporal** sobre ella.
 
-## MVP desarrollado
+## Estado actual: primer prototipo funcional
 
-Durante la hackathon se ha priorizado un MVP funcional centrado en el calendario de 42.
+Durante la hackathon hemos priorizado una primera versión funcional y deliberadamente contenida.
 
-Actualmente Calendar42 integra:
+El prototipo actual demuestra la idea central de Calendar42 mediante:
 
-- eventos del campus;
-- eventos en los que participa el usuario;
-- exámenes;
-- slots de corrección abiertos;
-- correcciones planificadas;
+- autenticación con la cuenta de 42 mediante OAuth;
+- conexión con la API de 42;
 - vista mensual;
 - vista diaria organizada por horas;
-- filtros para activar y desactivar las diferentes capas;
-- autenticación con la cuenta de 42 mediante OAuth.
+- visualización de información temporal procedente de 42;
+- filtros para trabajar con diferentes categorías;
+- una primera estructura de capas para eventos, exámenes, slots y correcciones.
+- visualización de la coalición del usuario en la cabecera.
+
+Esta versión debe entenderse como un **primer prototipo funcional**, todavía en una fase temprana de desarrollo.
+
+Su objetivo en esta etapa no es cubrir todo el flujo de gestión de 42, sino demostrar que una capa temporal unificada puede convertirse en una forma más clara de organizar la actividad del estudiante.
+
+## Próxima implementación: acciones sobre la información de 42
+
+Durante el desarrollo hemos identificado y estudiado técnicamente varias acciones que ampliarían el prototipo actual.
+
+Estas funcionalidades **no están implementadas todavía**, pero forman parte del siguiente paso natural del proyecto:
+
+- inscribirse a un examen;
+- apuntarse a un evento;
+- agendar una corrección;
+- visualizar slots abiertos de otros estudiantes y seleccionar uno para recibir una corrección.
+
+Estas acciones requerirán implementar y validar las operaciones correspondientes sobre la API de 42.
+
+La diferencia es importante: **el prototipo actual demuestra la capa de visualización y planificación; la siguiente iteración convertiría esa capa en una herramienta de interacción y gestión.**
 
 ## Ideación y prototipado
 
-La idea partió de una necesidad experimentada directamente durante la experiencia de Discovery de Python y Piscina: para organizar el estudio no basta con conocer las actividades existentes, sino que es necesario saber **cómo encajan entre ellas en el tiempo**.
+La idea partió de una necesidad experimentada directamente durante la **Discovery de Python** y la **Piscina**: para organizar bien el estudio y las correcciones no basta con saber qué actividades existen, sino que es necesario saber **cómo encajan entre ellas en el tiempo**.
 
-A partir de esta necesidad se planteó reunir en una única vista de calendario la información que actualmente está distribuida por diferentes apartados de la intra.
+A partir de esta necesidad se planteó:
 
-La funcionalidad clave identificada fue trabajar con diferentes **capas de información**, pudiendo activar o desactivar categorías y visualizar combinaciones como eventos junto con correcciones y slots.
+1. reunir la información temporal de 42 en una única interfaz;
+2. organizarla mediante diferentes capas;
+3. facilitar la detección visual de solapamientos;
+4. evolucionar posteriormente desde la visualización hacia la interacción.
 
-El objetivo del prototipo fue comprobar si esta representación podía resolver el problema principal: disponer de una visión temporal unificada que permita detectar conflictos y organizar mejor el tiempo dedicado a 42.
-
-El MVP se centró deliberadamente en esta primera pieza del producto, evitando ampliar durante la hackathon el alcance con funcionalidades que todavía no estaban implementadas.
+Durante la hackathon se decidió limitar el alcance de la primera versión para conseguir una base funcional y demostrable, dejando las operaciones de gestión como siguiente etapa de desarrollo.
 
 ## Equipo
 
@@ -95,8 +107,8 @@ Desarrollo e implementación técnica del proyecto.
 - Implementación del backend.
 - Integración con la API de 42.
 - Implementación del sistema de autenticación.
-- Integración y tratamiento de eventos, exámenes, slots y correcciones.
-- Puesta en funcionamiento del MVP.
+- Integración y tratamiento de la información necesaria para construir la agenda.
+- Puesta en funcionamiento del primer prototipo.
 
 **Dedicación: 10 horas.**
 
@@ -105,9 +117,9 @@ Desarrollo e implementación técnica del proyecto.
 El trabajo se dividió principalmente en dos bloques:
 
 1. **Definición del problema y de la solución**, incluyendo la conceptualización de Calendar42 y la preparación de la presentación.
-2. **Implementación técnica del MVP**, incluyendo frontend, backend e integración con la API de 42.
+2. **Implementación técnica del prototipo**, incluyendo frontend, backend e integración con la API de 42.
 
-Esta división permitió concentrar el tiempo disponible en conseguir una primera versión funcional del producto y, posteriormente, preparar su presentación.
+Esta división permitió concentrar el tiempo disponible en conseguir una primera versión funcional y, posteriormente, preparar una evolución clara del producto.
 
 ## Integración con la API de 42
 
@@ -178,7 +190,7 @@ Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejem
 | `GET /api/auth/callback` | Vuelta del login y creación de la sesión |
 | `GET /api/auth/me` | Usuario de la sesión |
 | `POST /api/auth/logout` | Cierra la sesión |
-| `GET /api/agenda?from&to` | Eventos, exámenes, slots y correcciones entre dos fechas ISO |
+| `GET /api/agenda?from&to` | Construye la agenda entre dos fechas ISO |
 
 ## Estructura
 
@@ -192,33 +204,43 @@ src/      React: Calendar, DayView, TypeFilter, LoginView
 
 ## Evolución del producto
 
-El MVP de Calendar42 se centra en resolver el problema principal: reunir en una única vista la información temporal que actualmente está distribuida por diferentes apartados de la intra.
+El primer objetivo de Calendar42 es resolver el problema de visualización y planificación temporal.
 
-### 1. Integración con calendarios personales
+A partir de ahí, el proyecto puede evolucionar en varias direcciones.
 
-Una evolución natural sería permitir que un evento al que el estudiante se ha inscrito pueda añadirse directamente a su calendario personal.
+### 1. Convertir la agenda en una herramienta de gestión
+
+Las cuatro acciones ya identificadas técnicamente —inscripción a exámenes, inscripción a eventos, agendado de correcciones y selección de slots abiertos— serían el siguiente paso para pasar de una agenda principalmente informativa a una herramienta de interacción con 42.
+
+### 2. Integración con calendarios personales
+
+Una posible evolución sería permitir que un evento de 42 pueda añadirse directamente al calendario personal del estudiante.
 
 Calendar42 mantendría la responsabilidad sobre la información de 42, mientras que el calendario personal seguiría siendo responsable de la vida personal del estudiante.
 
-En una fase posterior, y siempre mediante autorización explícita del usuario, podría estudiarse una integración bidireccional para superponer compromisos personales y actividad de 42 y detectar conflictos o huecos disponibles.
+Más adelante podría estudiarse una integración bidireccional, siempre mediante autorización explícita del usuario, para superponer compromisos personales y actividad de 42 y detectar conflictos o huecos disponibles.
 
-### 2. Peer-to-peer incentivado
+**Esta línea todavía requiere estudio y validación técnica.**
+
+### 3. Peer-to-peer incentivado
 
 Otra posible evolución parte de los propios slots de corrección.
 
 La propuesta sería:
 
-**ofrecer tiempo a la comunidad → ayudar a otro estudiante → recibir un beneficio.**
+> **ofrecer tiempo a la comunidad → ayudar a otro estudiante → recibir un beneficio.**
 
 El tipo de beneficio dependería de las posibilidades y criterios de 42 Madrid. Podría plantearse mediante horas o días adicionales, Altaris, reconocimiento u otros incentivos.
 
-### 3. Presencialidad y comunidad
+**Esta línea todavía requiere estudio y validación técnica y no forma parte del prototipo actual.**
 
-La misma lógica podría utilizarse para incentivar la asistencia a los clústers y la participación en actividades presenciales.
+### 4. Presencialidad y comunidad
 
-Calendar42 podría convertirse así en una capa que no solo informa de qué sucede en 42, sino que ayuda a **organizar el tiempo, favorecer la colaboración entre estudiantes y reforzar la comunidad presencial**.
+La misma lógica podría utilizarse para favorecer la asistencia a los clústers y la participación en actividades presenciales.
 
-Estas funcionalidades forman parte de la visión futura y **no se presentan como funcionalidades implementadas en el MVP**.
+Calendar42 podría evolucionar desde una herramienta de planificación hacia una capa que también ayude a **organizar el tiempo, favorecer la colaboración y reforzar la comunidad presencial**.
+
+**Esta línea todavía requiere estudio y validación técnica y no forma parte del prototipo actual.**
 
 ## Visión
 
@@ -230,7 +252,9 @@ La primera respuesta es reunirla:
 
 > **Una vista. Diferentes capas. Mejor planificación.**
 
-La visión a largo plazo es convertir esa capa temporal en una herramienta que ayude al estudiante a decidir **cómo utilizar mejor su tiempo dentro y fuera de 42**.
+El siguiente paso es convertir esa visión en una herramienta con la que el estudiante pueda no solo **ver** lo que ocurre en 42, sino también **organizar y gestionar** mejor su tiempo.
+
+A largo plazo, la visión es construir una capa de planificación que conecte la actividad de 42 con las decisiones reales que toma el estudiante sobre su tiempo.
 
 ## Datos del equipo
 
