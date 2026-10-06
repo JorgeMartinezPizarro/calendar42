@@ -14,6 +14,121 @@
   flex-wrap: wrap;
 }
 
+/* ---- coalición -------------------------------------------------------------
+   El color llega en --coalition (desde el servidor). La cabecera lleva una
+   línea de color debajo y un distintivo con el emblema y el nombre. */
+.app--coalition {
+  --coalition: #4f8cff; /* valor por defecto si la intra no manda color */
+}
+
+.app--coalition .app__header {
+  position: relative;
+  padding-bottom: 0.75rem;
+}
+
+.app--coalition .app__header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--coalition) 0%,
+    color-mix(in srgb, var(--coalition) 60%, transparent) 55%,
+    transparent 100%
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--coalition) 55%, transparent);
+}
+
+.app--coalition .app__avatar {
+  box-shadow: 0 0 0 2px var(--coalition);
+}
+
+.coalition {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.25rem 0.85rem 0.25rem 0.3rem;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--coalition) 92%, #fff) 0%,
+    var(--coalition) 55%,
+    color-mix(in srgb, var(--coalition) 70%, #000) 100%
+  );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--coalition) 55%, transparent),
+    0 6px 18px -6px color-mix(in srgb, var(--coalition) 85%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  cursor: default;
+  animation: coalition-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.coalition__emblem {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-weight: 800;
+  font-size: 0.95rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.coalition__logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  /* Los logos de la intra suelen ser SVG oscuros o blancos; los forzamos a blanco. */
+  filter: brightness(0) invert(1);
+}
+
+.coalition__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.coalition__label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.coalition__name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+@keyframes coalition-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coalition {
+    animation: none;
+  }
+}
+
 .app__header h1 {
   margin: 0;
   font-size: 1.6rem;

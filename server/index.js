@@ -10,7 +10,7 @@ import {
   hasAppCredentials,
   refreshTokens,
 } from './intra.js'
-import { mockAgenda } from './mock.js'
+import { mockAgenda, mockCoalition } from './mock.js'
 import {
   SESSION_COOKIE,
   STATE_COOKIE,
@@ -139,6 +139,7 @@ app.post('/api/auth/demo', (req, res) => {
     displayName: 'Estudiante demo',
     image: null,
     campusId: DEFAULT_CAMPUS_ID,
+    coalition: mockCoalition(),
   }
   const id = createSession({ user, tokens: null, demo: true })
   setCookie(res, SESSION_COOKIE, id, { maxAgeMs: 24 * 60 * 60 * 1000 })

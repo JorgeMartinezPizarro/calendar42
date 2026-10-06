@@ -157,9 +157,11 @@ function App() {
   }
 
   const warnings = currentMonth?.warnings ?? []
+  const coalition = auth.user.coalition ?? null
+  const coalitionStyle = coalition?.color ? { '--coalition': coalition.color } : undefined
 
   return (
-    <div className="app">
+    <div className={`app${coalition ? ' app--coalition' : ''}`} style={coalitionStyle}>
       <header className="app__header">
         <h1>Calendar42</h1>
         <p className="app__subtitle">Calendario para estudiantes de 42 Madrid</p>
@@ -187,6 +189,21 @@ function App() {
           </span>
         )}
         <div className="app__user">
+          {coalition && (
+            <span className="coalition" title={`Coalición: ${coalition.name}`}>
+              <span className="coalition__emblem" aria-hidden="true">
+                {coalition.image ? (
+                  <img className="coalition__logo" src={coalition.image} alt="" />
+                ) : (
+                  coalition.name.replace(/^the\s+/i, '').charAt(0).toUpperCase()
+                )}
+              </span>
+              <span className="coalition__text">
+                <span className="coalition__label">Coalición</span>
+                <span className="coalition__name">{coalition.name}</span>
+              </span>
+            </span>
+          )}
           {auth.user.image && (
             <img className="app__avatar" src={auth.user.image} alt="" width="28" height="28" />
           )}

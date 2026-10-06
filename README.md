@@ -114,6 +114,7 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 | Recurso | Para qué | Token |
 |---|---|---|
 | `GET /v2/me` | Usuario y campus principal tras el login | usuario |
+| `GET /v2/users/:id/coalitions` | Coalición del usuario (nombre, color y emblema para la cabecera) | usuario |
 | `GET /v2/campus/:id/events` | Eventos del campus | usuario |
 | `GET /v2/users/:id/events` | Eventos en los que el usuario está inscrito | usuario |
 | `GET /v2/campus/:id/exams` | Exámenes del campus | app |

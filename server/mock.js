@@ -1,6 +1,20 @@
 // Datos de ejemplo para el modo demo (sin credenciales de la intra).
 // Se generan en relación al rango pedido para que siempre haya algo que ver.
 
+// Las cuatro coaliciones clásicas de 42, con sus colores. En la intra cada
+// campus tiene las suyas; aquí solo sirven para ver el distintivo de la cabecera.
+export const DEMO_COALITIONS = [
+  { id: 1, name: 'The Federation', slug: 'the-federation', color: '#00babc', image: null, cover: null },
+  { id: 2, name: 'The Alliance', slug: 'the-alliance', color: '#4ebf8a', image: null, cover: null },
+  { id: 3, name: 'The Order', slug: 'the-order', color: '#ff6950', image: null, cover: null },
+  { id: 4, name: 'The Assembly', slug: 'the-assembly', color: '#a061d1', image: null, cover: null },
+]
+
+/** Una coalición al azar para cada sesión demo, así se ven los cuatro colores. */
+export function mockCoalition() {
+  return DEMO_COALITIONS[Math.floor(Math.random() * DEMO_COALITIONS.length)]
+}
+
 const EVENTS = [
   { day: 2, start: 10, hours: 2, name: 'Charla: Introducción a Docker', kind: 'conference', location: 'Auditorio' },
   { day: 5, start: 16, hours: 1.5, name: 'Rush 01 kick-off', kind: 'rush', location: 'Cluster 1' },

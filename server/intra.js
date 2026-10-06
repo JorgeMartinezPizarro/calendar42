@@ -191,6 +191,39 @@ export async function fetchMe(accessToken) {
     displayName: me.displayname ?? me.login,
     image: me.image?.versions?.small ?? me.image?.link ?? null,
     campusId: primary?.campus_id ?? me.campus?.[0]?.id ?? null,
+    coalition: await fetchMyCoalition(accessToken, me.id),
+  }
+}
+
+/** Normaliza una coalición de la intra a { id, name, slug, color, image, cover }. */
+export function normalizeCoalition(raw) {
+  if (!raw) return null
+  const color = typeof raw.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(raw.color.trim())
+    ? raw.color.trim()
+    : null
+  return {
+    id: raw.id,
+    name: raw.name,
+    slug: raw.slug ?? null,
+    color,
+    image: raw.image_url ?? null,
+    cover: raw.cover_url ?? null,
+  }
+}
+
+/**
+ * Coalición del usuario. `/users/:id/coalitions` devuelve las coaliciones a las
+ * que pertenece (una por bloc/cursus); nos quedamos con la primera que tenga
+ * color. Es un dato decorativo: si falla, devolvemos null y seguimos.
+ */
+export async function fetchMyCoalition(accessToken, userId) {
+  try {
+    const raw = await intraGet(accessToken, `/users/${userId}/coalitions`)
+    const list = Array.isArray(raw) ? raw.map(normalizeCoalition) : []
+    return list.find((c) => c?.color) ?? list[0] ?? null
+  } catch (err) {
+    console.warn('[coalition] no se pudo obtener la coalición:', err.message)
+    return null
   }
 }
 
