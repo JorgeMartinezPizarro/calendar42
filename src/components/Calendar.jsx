@@ -12,9 +12,8 @@ import './Calendar.css'
 /**
  * Vista mensual.
  * - viewDate: primer día del mes mostrado (lo controla el padre).
- * - dayTypes: Map 'YYYY-MM-DD' -> Map tipo -> { mine: boolean } con algo ese día.
- *   La barra del tipo se pinta a plena intensidad si el usuario está inscrito
- *   en algo de ese tipo ese día, y atenuada si no.
+ * - dayTypes: Map 'YYYY-MM-DD' -> Set de tipos con algo del usuario ese día.
+ *   Se pinta una barra por tipo debajo del número.
  */
 function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayTypes }) {
   const today = new Date()
@@ -66,9 +65,7 @@ function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayT
             .filter(Boolean)
             .join(' ')
 
-          const typeLabels = hasItems
-            ? AGENDA_TYPES.filter((t) => types.has(t.type)).map((t) => t.label.toLowerCase())
-            : []
+          const present = hasItems ? AGENDA_TYPES.filter((t) => types.has(t.type)) : []
 
           return (
             <button
@@ -78,17 +75,17 @@ function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayT
               onClick={() => onSelectDate(date)}
               aria-pressed={Boolean(isSelected)}
               aria-current={isToday ? 'date' : undefined}
-              aria-label={hasItems ? `${date.getDate()}, ${typeLabels.join(', ')}` : undefined}
+              aria-label={
+                hasItems
+                  ? `${date.getDate()}, ${present.map((t) => t.label.toLowerCase()).join(', ')}`
+                  : undefined
+              }
             >
               <span className="calendar__day-number">{date.getDate()}</span>
               {hasItems && (
                 <span className="calendar__marks" aria-hidden="true">
-                  {AGENDA_TYPES.filter((t) => types.has(t.type)).map((t) => (
-                    <span
-                      key={t.type}
-                      className={`calendar__mark${types.get(t.type).mine ? ' calendar__mark--mine' : ''}`}
-                      style={{ background: t.color }}
-                    />
+                  {present.map((t) => (
+                    <span key={t.type} className="calendar__mark" style={{ background: t.color }} />
                   ))}
                 </span>
               )}

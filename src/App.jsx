@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import AvailableList from './components/AvailableList.jsx'
 import Calendar from './components/Calendar.jsx'
 import DayView from './components/DayView.jsx'
+import ItemPopover from './components/ItemPopover.jsx'
 import LoginView from './components/LoginView.jsx'
 import TypeFilter from './components/TypeFilter.jsx'
-import { AGENDA_TYPES, DEFAULT_FILTERS, isItemVisible } from './agendaTypes.js'
+import { AGENDA_TYPES, DEFAULT_FILTERS, countByFilter, isAvailable, isItemVisible } from './agendaTypes.js'
 import { fetchMe, logout } from './api/auth.js'
 import { fetchAgenda } from './api/agenda.js'
+import { setEventSubscription } from './api/events.js'
+import { useNow } from './hooks/useNow.js'
+import { overlappingItems, subscriptionState } from './subscription.js'
 import { getMonthGridRange, toDateKey } from './utils/date.js'
 import './App.css'
 
@@ -62,6 +67,7 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(today)
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [enabledFilters, setEnabledFilters] = useState(DEFAULT_FILTERS)
+  const now = useNow()
 
   // Agenda cacheada por mes visible: { 'YYYY-M': { items, counts, warnings } }
   const [agendaByMonth, setAgendaByMonth] = useState({})
@@ -100,30 +106,40 @@ function App() {
 
   const currentMonth = agendaByMonth[currentKey]
 
-  // Todo lo cargado (el día seleccionado puede caer en celdas de otro mes),
-  // filtrado por las categorías activas.
+  // Todo lo cargado, sin repetidos: las rejillas de dos meses seguidos
+  // comparten días, así que un mismo elemento puede venir en ambos.
+  const allItems = useMemo(() => {
+    const byId = new Map()
+    for (const month of Object.values(agendaByMonth)) {
+      for (const it of month.items) byId.set(it.id, it)
+    }
+    return [...byId.values()]
+  }, [agendaByMonth])
+
+  // Lo que va al calendario y a la vista del día: lo del usuario, según el filtro.
   const visibleItems = useMemo(
-    () =>
-      Object.values(agendaByMonth)
-        .flatMap((m) => m.items)
-        .filter((it) => isItemVisible(it, enabledFilters)),
-    [agendaByMonth, enabledFilters],
+    () => allItems.filter((it) => isItemVisible(it, enabledFilters)),
+    [allItems, enabledFilters],
   )
 
-  // Día (clave local) -> Map tipo -> { mine }, para las marcas del calendario.
-  // Slots y correcciones son siempre personales, así que cuentan como "míos".
+  // Eventos y exámenes del mes visible sin inscripción y que aún no han terminado.
+  const availableItems = useMemo(
+    () => (currentMonth?.items ?? []).filter((it) => isAvailable(it) && it.endAt > now),
+    [currentMonth, now],
+  )
+
+  const filterCounts = useMemo(() => countByFilter(currentMonth?.items ?? []), [currentMonth])
+
+  // Día (clave local) -> Set de tipos presentes, para las marcas del calendario.
   const dayTypes = useMemo(() => {
     const map = new Map()
     for (const it of visibleItems) {
-      const mine = it.type === 'slot' || it.type === 'correction' || Boolean(it.subscribed)
       // Un elemento que dura varios días marca cada uno de ellos.
       const cursor = new Date(it.beginAt.getFullYear(), it.beginAt.getMonth(), it.beginAt.getDate())
       while (cursor < it.endAt) {
         const key = toDateKey(cursor)
-        if (!map.has(key)) map.set(key, new Map())
-        const byType = map.get(key)
-        const prev = byType.get(it.type)
-        byType.set(it.type, { mine: Boolean(prev?.mine) || mine })
+        if (!map.has(key)) map.set(key, new Set())
+        map.get(key).add(it.type)
         cursor.setDate(cursor.getDate() + 1)
       }
     }
@@ -139,6 +155,75 @@ function App() {
       delete next[currentKey]
       return next
     })
+
+  // ---- ficha --------------------------------------------------------------
+  // Se abre al pulsar un elemento (lista o vista del día) y ocupa el sitio de
+  // la vista del día (toda la pantalla en móvil) hasta cerrarla.
+  const [openId, setOpenId] = useState(null)
+  const openItemCard = useCallback((item) => setOpenId(item.id), [])
+  const closeItem = useCallback(() => setOpenId(null), [])
+
+  // Elegir un día en el calendario cierra la ficha para enseñar ese día.
+  const selectDate = useCallback((date) => {
+    setSelectedDate(date)
+    setOpenId(null)
+  }, [])
+
+  // Siempre la versión más reciente del elemento (cambia al apuntarse o borrarse).
+  const openItem = openId ? (allItems.find((it) => it.id === openId) ?? null) : null
+
+  // Apuntarse a eventos exige el scope "profile" en el token (ver intra.js).
+  // Si la sesión no lo tiene, el botón sale desactivado con el motivo en vez
+  // de fallar al pulsarlo. Sin dato de scope (sesiones antiguas) se intenta.
+  const scopeOk = Boolean(auth.demo) || !auth.scope || auth.scope.split(' ').includes('profile')
+
+  // "Slot libre / ocupado": lo del usuario que se solapa con el evento o examen de la ficha.
+  const conflicts = useMemo(
+    () =>
+      openItem && (openItem.type === 'event' || openItem.type === 'exam')
+        ? overlappingItems(openItem, allItems)
+        : null,
+    [openItem, allItems],
+  )
+
+  // ---- apuntarse / borrarse -----------------------------------------------
+  const [actions, setActions] = useState({}) // id -> { busy, error }
+
+  const patchItem = (id, patch) =>
+    setAgendaByMonth((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([key, month]) => [
+          key,
+          { ...month, items: month.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) },
+        ]),
+      ),
+    )
+
+  // La ficha se queda abierta tras la operación, ya actualizada: así se ve
+  // el cambio (inscrito o no, aforo) y se puede deshacer al momento.
+  const toggleSubscription = async (item) => {
+    const subscribe = !item.subscribed
+    setActions((prev) => ({ ...prev, [item.id]: { busy: true, error: null } }))
+    try {
+      const result = await setEventSubscription(item.eventId, subscribe)
+      patchItem(item.id, {
+        subscribed: result.subscribed,
+        subscribers:
+          result.subscribers ?? Math.max(0, (item.subscribers ?? 0) + (result.subscribed ? 1 : -1)),
+      })
+      setActions((prev) => {
+        const next = { ...prev }
+        delete next[item.id]
+        return next
+      })
+    } catch (err) {
+      if (err.status === 401) {
+        backToLogin()
+        return
+      }
+      setActions((prev) => ({ ...prev, [item.id]: { busy: false, error: err.message } }))
+    }
+  }
 
   // ---- render -------------------------------------------------------------
   if (auth.status === 'checking') {
@@ -159,6 +244,17 @@ function App() {
   const warnings = currentMonth?.warnings ?? []
   const coalition = auth.user.coalition ?? null
   const coalitionStyle = coalition?.color ? { '--coalition': coalition.color } : undefined
+
+  const panel = openItem && (
+    <ItemPopover
+      item={openItem}
+      subscription={subscriptionState(openItem, now, { scopeOk })}
+      conflicts={conflicts}
+      action={actions[openItem.id]}
+      onToggleSubscription={toggleSubscription}
+      onClose={closeItem}
+    />
+  )
 
   return (
     <div className={`app${coalition ? ' app--coalition' : ''}`} style={coalitionStyle}>
@@ -220,13 +316,26 @@ function App() {
             viewDate={viewDate}
             onViewDateChange={setViewDate}
             selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
+            onSelectDate={selectDate}
             dayTypes={dayTypes}
           />
-          <TypeFilter enabled={enabledFilters} counts={currentMonth?.counts} onToggle={toggleFilter} />
+          <TypeFilter enabled={enabledFilters} counts={filterCounts} onToggle={toggleFilter} />
+          <AvailableList
+            items={availableItems}
+            status={status}
+            openItemId={openItem?.id ?? null}
+            onOpenItem={openItemCard}
+          />
         </aside>
         <section className="app__content">
-          <DayView date={selectedDate} items={visibleItems} status={status} />
+          <DayView
+            date={selectedDate}
+            items={visibleItems}
+            status={status}
+            panel={panel}
+            openItemId={openItem?.id ?? null}
+            onOpenItem={openItemCard}
+          />
         </section>
       </main>
     </div>

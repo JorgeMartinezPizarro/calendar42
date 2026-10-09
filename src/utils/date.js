@@ -51,6 +51,19 @@ export function formatTime(date) {
   return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 }
 
+/** "mié, 15 oct" */
+export function formatShortDay(date) {
+  return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+/** Franja horaria: "mié, 15 oct · 18:00–20:00"; si cruza días, con ambas fechas. */
+export function formatRange(begin, end) {
+  if (isSameDay(begin, end)) {
+    return `${formatShortDay(begin)} · ${formatTime(begin)}–${formatTime(end)}`
+  }
+  return `${formatShortDay(begin)} ${formatTime(begin)} – ${formatShortDay(end)} ${formatTime(end)}`
+}
+
 /**
  * Builds the grid of days for a month view.
  * Weeks start on Monday. Returns a flat array of 42 cells (6 weeks),

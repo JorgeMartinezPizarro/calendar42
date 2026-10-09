@@ -99,7 +99,7 @@
   background: var(--cal-accent-soft);
 }
 
-/* Subrayado bajo el número: una barra por tipo de elemento presente ese día. */
+/* Subrayado bajo el número: una barra por tipo de elemento del usuario ese día. */
 .calendar__marks {
   display: flex;
   gap: 2px;
@@ -109,15 +109,8 @@
 
 .calendar__mark {
   flex: 1;
-  height: 3px;
-  border-radius: 999px;
-  opacity: 0.5;
-}
-
-/* Hay algo de ese tipo en lo que el usuario está inscrito (o es personal). */
-.calendar__mark--mine {
-  opacity: 1;
   height: 4px;
+  border-radius: 999px;
 }
 
 .calendar__day:focus-visible {

@@ -6,8 +6,10 @@ const INTRA_BASE = 'https://api.intra.42.fr'
 const PAGE_SIZE = 100
 
 // Scopes: `public` para eventos/exámenes del campus, `projects` para slots y
-// correcciones del usuario. La app registrada en la intra debe tenerlos activados.
-export const OAUTH_SCOPES = 'public projects'
+// correcciones del usuario, `profile` para apuntarse y borrarse de eventos
+// (la intra lo exige para crear y borrar datos del usuario). La app registrada
+// en la intra debe tenerlos activados; si le falta alguno, el login falla.
+export const OAUTH_SCOPES = 'public projects profile'
 
 export function hasAppCredentials() {
   return Boolean(process.env.FT_CLIENT_ID && process.env.FT_CLIENT_SECRET)
@@ -104,17 +106,39 @@ async function fetchWithRetry(url, options) {
   return res
 }
 
-export async function intraGet(accessToken, path, params = {}) {
+export function intraGet(accessToken, path, params = {}) {
+  return intraRequest(accessToken, path, { params })
+}
+
+/** Errores de validación de la intra ({ campo: ['mensaje'] }) en una línea. */
+function describeErrors(errors) {
+  if (!errors || typeof errors !== 'object') return null
+  return Object.entries(errors)
+    .map(([field, msgs]) => `${field}: ${[].concat(msgs).join(', ')}`)
+    .join('; ')
+}
+
+/**
+ * Petición genérica a la intra. `body` (objeto) se envía como JSON. Las
+ * respuestas sin cuerpo (204, p. ej. al borrar) devuelven null.
+ */
+export async function intraRequest(accessToken, path, { method = 'GET', params = {}, body } = {}) {
   const url = new URL(`${INTRA_BASE}/v2${path}`)
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value)
   }
+  const options = { method, headers: { Authorization: `Bearer ${accessToken}` } }
+  if (body !== undefined) {
+    options.headers['Content-Type'] = 'application/json'
+    options.body = JSON.stringify(body)
+  }
+  const label = method === 'GET' ? path : `${method} ${path}`
   let res
   try {
-    res = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    res = await fetchWithRetry(url, options)
   } catch (netErr) {
     // Conexión cortada, DNS, etc.: la intra no ha respondido.
-    const err = new Error(`La intra no respondió en ${path} (${netErr.cause?.code ?? netErr.message})`)
+    const err = new Error(`La intra no respondió en ${label} (${netErr.cause?.code ?? netErr.message})`)
     err.status = 503
     err.path = path
     err.transient = true
@@ -138,7 +162,7 @@ export async function intraGet(accessToken, path, params = {}) {
       } else if (text) {
         try {
           const body = JSON.parse(text)
-          reason = body.message ?? body.error_description ?? body.error ?? text
+          reason = body.message ?? body.error_description ?? body.error ?? describeErrors(body.errors) ?? text
         } catch {
           reason = text
         }
@@ -147,13 +171,14 @@ export async function intraGet(accessToken, path, params = {}) {
       // sin cuerpo legible
     }
     const detail = reason ? `: ${String(reason).slice(0, 200)}` : ''
-    const err = new Error(`Error de la intra en ${path} (${res.status}${detail})`)
+    const err = new Error(`Error de la intra en ${label} (${res.status}${detail})`)
     err.status = res.status
     err.path = path
     err.reason = reason
     err.transient = res.status === 429 || res.status >= 500
     throw err
   }
+  if (res.status === 204) return null
   return res.json()
 }
 
@@ -185,14 +210,38 @@ async function fetchAllInRange(accessToken, path, { from, to }, extraParams = {}
 export async function fetchMe(accessToken) {
   const me = await intraGet(accessToken, '/me')
   const primary = me.campus_users?.find((c) => c.is_primary)
+  const campusId = primary?.campus_id ?? me.campus?.[0]?.id ?? null
+  const cursus = pickCurrentCursus(me.cursus_users)
   return {
     id: me.id,
     login: me.login,
     displayName: me.displayname ?? me.login,
     image: me.image?.versions?.small ?? me.image?.link ?? null,
-    campusId: primary?.campus_id ?? me.campus?.[0]?.id ?? null,
-    coalition: await fetchMyCoalition(accessToken, me.id),
+    campusId,
+    coalition: await fetchMyCoalition(accessToken, me.id, { campusId, cursusId: cursus?.id ?? null }),
   }
+}
+
+// Cursus principal de 42. Si el usuario está en él, manda sobre cualquier
+// piscina o discovery, aunque estas sean más recientes.
+const MAIN_CURSUS_SLUG = '42cursus'
+
+/**
+ * Cursus "actual" del usuario a partir de `cursus_users` de `/me`: el 42cursus
+ * si lo tiene; si no (p. ej. un pisciner), el más reciente, dando prioridad a
+ * los que siguen abiertos (sin `end_at` o con `end_at` en el futuro).
+ */
+export function pickCurrentCursus(cursusUsers) {
+  if (!Array.isArray(cursusUsers) || cursusUsers.length === 0) return null
+  const now = Date.now()
+  const isOpen = (cu) => !cu.end_at || (Date.parse(cu.end_at) || 0) > now
+  const beginAt = (cu) => Date.parse(cu.begin_at) || 0
+  const chosen =
+    cursusUsers.find((cu) => cu.cursus?.slug === MAIN_CURSUS_SLUG) ??
+    [...cursusUsers].sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || beginAt(b) - beginAt(a))[0]
+  const id = chosen.cursus_id ?? chosen.cursus?.id ?? null
+  if (id == null) return null
+  return { id, name: chosen.cursus?.name ?? null, slug: chosen.cursus?.slug ?? null }
 }
 
 /** Normaliza una coalición de la intra a { id, name, slug, color, image, cover }. */
@@ -212,19 +261,46 @@ export function normalizeCoalition(raw) {
 }
 
 /**
- * Coalición del usuario. `/users/:id/coalitions` devuelve las coaliciones a las
- * que pertenece (una por bloc/cursus); nos quedamos con la primera que tenga
- * color. Es un dato decorativo: si falla, devolvemos null y seguimos.
+ * Coalición del usuario. `/users/:id/coalitions` devuelve todas las coaliciones
+ * a las que ha pertenecido (una por bloc: piscina, discovery, cursus...) sin
+ * decir a qué cursus corresponde cada una, así que un alumno que hizo la piscina
+ * tiene dos o más. Para quedarnos con la del cursus actual consultamos los blocs
+ * de ese cursus en su campus (`/blocs`), que sí listan sus coaliciones.
+ * Es un dato decorativo: si algo falla, devolvemos lo mejor que tengamos y seguimos.
  */
-export async function fetchMyCoalition(accessToken, userId) {
+export async function fetchMyCoalition(accessToken, userId, { campusId = null, cursusId = null } = {}) {
   try {
     const raw = await intraGet(accessToken, `/users/${userId}/coalitions`)
-    const list = Array.isArray(raw) ? raw.map(normalizeCoalition) : []
-    return list.find((c) => c?.color) ?? list[0] ?? null
+    const list = Array.isArray(raw) ? raw.map(normalizeCoalition).filter(Boolean) : []
+    if (list.length === 0) return null
+    const fallback = () => list.find((c) => c.color) ?? list[0]
+    if (list.length === 1 || cursusId == null) return fallback()
+
+    const ofCursus = await fetchCoalitionIdsOfCursus(accessToken, { campusId, cursusId })
+    return list.find((c) => ofCursus.has(c.id)) ?? fallback()
   } catch (err) {
     console.warn('[coalition] no se pudo obtener la coalición:', err.message)
     return null
   }
+}
+
+/**
+ * Ids de las coaliciones de los blocs de un cursus (y de un campus, si se conoce).
+ * Un bloc agrupa las coaliciones de un cursus en un campus.
+ */
+async function fetchCoalitionIdsOfCursus(accessToken, { campusId, cursusId }) {
+  const params = { 'filter[cursus_id]': cursusId, 'page[size]': PAGE_SIZE }
+  if (campusId != null) params['filter[campus_id]'] = campusId
+  const ids = new Set()
+  try {
+    const blocs = await intraGet(accessToken, '/blocs', params)
+    for (const bloc of Array.isArray(blocs) ? blocs : []) {
+      for (const c of bloc.coalitions ?? []) ids.add(c.id)
+    }
+  } catch (err) {
+    console.warn('[coalition] no se pudieron consultar los blocs del cursus:', err.message)
+  }
+  return ids
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +312,7 @@ export async function fetchMyCoalition(accessToken, userId) {
 export function normalizeEvent(raw) {
   return {
     id: `event-${raw.id}`,
+    eventId: raw.id,
     type: 'event',
     kind: raw.kind || 'event',
     name: raw.name,
@@ -243,8 +320,10 @@ export function normalizeEvent(raw) {
     location: raw.location ?? '',
     beginAt: raw.begin_at,
     endAt: raw.end_at,
-    maxPeople: raw.max_people ?? null,
+    maxPeople: raw.max_people > 0 ? raw.max_people : null, // 0 o null: sin límite
     subscribers: raw.nbr_subscribers ?? 0,
+    // Horas antes del inicio a partir de las cuales la intra no deja borrarse.
+    cancellationLimitHours: Number(raw.prohibition_of_cancellation) || 0,
   }
 }
 
@@ -258,6 +337,7 @@ export function normalizeExam(raw) {
 
   return {
     id: `exam-${raw.id}`,
+    examId: raw.id,
     type: 'exam',
     kind: 'exam',
     name: raw.name,
@@ -265,7 +345,7 @@ export function normalizeExam(raw) {
     location: raw.location ?? '',
     beginAt: raw.begin_at,
     endAt: raw.end_at,
-    maxPeople: raw.max_people ?? null,
+    maxPeople: raw.max_people > 0 ? raw.max_people : null, // 0 o null: sin límite
     subscribers: raw.nbr_subscribers ?? 0,
   }
 }
@@ -389,6 +469,52 @@ export async function fetchMyExamIds({ userId, from, to }) {
   const token = await getAppToken()
   const raw = await fetchAllInRange(token, `/users/${userId}/exams`, { from, to })
   return new Set(raw.map((e) => e.id))
+}
+
+// ---------------------------------------------------------------------------
+// Inscripción a eventos
+// ---------------------------------------------------------------------------
+
+/** Un evento concreto ya normalizado, o null si no se puede releer. */
+async function fetchEventOrNull(accessToken, eventId) {
+  try {
+    return normalizeEvent(await intraGet(accessToken, `/events/${eventId}`))
+  } catch (err) {
+    console.warn('[events] no se pudo releer el evento:', err.message)
+    return null
+  }
+}
+
+/**
+ * Inscribe al usuario en un evento (`POST /events_users`). La intra valida
+ * aforo y fechas: si rechaza la inscripción, el error lleva su motivo en
+ * `reason`. Devuelve el evento actualizado (o null si no se pudo releer).
+ */
+export async function subscribeToEvent(accessToken, { eventId, userId }) {
+  await intraRequest(accessToken, '/events_users', {
+    method: 'POST',
+    body: { events_user: { event_id: eventId, user_id: userId } },
+  })
+  return fetchEventOrNull(accessToken, eventId)
+}
+
+/**
+ * Borra la inscripción del usuario a un evento. Hace falta el id de la
+ * inscripción (`events_user`), que buscamos en `/users/:id/events_users`.
+ */
+export async function unsubscribeFromEvent(accessToken, { eventId, userId }) {
+  const list = await intraGet(accessToken, `/users/${userId}/events_users`, {
+    'filter[event_id]': eventId,
+    'page[size]': PAGE_SIZE,
+  })
+  const subscription = (Array.isArray(list) ? list : []).find(
+    (eu) => eu.event_id === eventId || eu.event?.id === eventId,
+  )
+  if (!subscription) {
+    throw Object.assign(new Error('No estás inscrito en este evento'), { status: 404 })
+  }
+  await intraRequest(accessToken, `/events_users/${subscription.id}`, { method: 'DELETE' })
+  return fetchEventOrNull(accessToken, eventId)
 }
 
 /** Slots de corrección abiertos del usuario en [from, to). Requiere scope `projects`. */

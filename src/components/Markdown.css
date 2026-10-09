@@ -1,0 +1,108 @@
+/* Markdown de la intra dentro de la ficha: compacto y con la tipografía de la app. */
+.markdown {
+  --md-border: rgba(128, 128, 128, 0.35);
+  --md-muted: rgba(128, 128, 128, 0.8);
+  --md-code-bg: rgba(128, 128, 128, 0.15);
+
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+  margin: 0.5em 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 0.9em 0 0.35em;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.markdown h1 { font-size: 1.15em; }
+.markdown h2 { font-size: 1.1em; }
+.markdown h3 { font-size: 1.05em; }
+.markdown h4,
+.markdown h5,
+.markdown h6 { font-size: 1em; }
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.4em;
+}
+
+.markdown li + li {
+  margin-top: 0.15em;
+}
+
+.markdown a {
+  color: #4f8cff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--md-code-bg);
+}
+
+.markdown pre {
+  padding: 0.6em 0.8em;
+  border-radius: 8px;
+  background: var(--md-code-bg);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown blockquote {
+  padding: 0.1em 0 0.1em 0.9em;
+  border-left: 3px solid var(--md-border);
+  color: var(--md-muted);
+}
+
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--md-border);
+  margin: 0.8em 0;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.markdown th,
+.markdown td {
+  padding: 0.25em 0.6em;
+  border: 1px solid var(--md-border);
+  text-align: left;
+}

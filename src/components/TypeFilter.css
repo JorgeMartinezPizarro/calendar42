@@ -43,17 +43,6 @@
   background: var(--tf-color);
   flex: none;
   transition: opacity 0.15s;
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  line-height: 1;
-  color: #fff;
-}
-
-/* "Míos": mismo color, con marca de inscrito. */
-.typefilter__item--mine .typefilter__swatch {
-  border: 1px solid var(--tf-color);
-  background: color-mix(in srgb, var(--tf-color) 35%, transparent);
 }
 
 .typefilter__note {

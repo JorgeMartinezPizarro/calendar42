@@ -15,6 +15,16 @@ export function mockCoalition() {
   return DEMO_COALITIONS[Math.floor(Math.random() * DEMO_COALITIONS.length)]
 }
 
+// Inscripciones cambiadas desde la app en modo demo (id de evento -> inscrito).
+// Viven en memoria: se pierden al reiniciar el servidor, como el resto del demo.
+const demoSubscriptions = new Map()
+
+/** Apunta o borra al usuario demo de un evento. */
+export function mockSetSubscription(eventId, subscribed) {
+  demoSubscriptions.set(eventId, subscribed)
+  return { subscribed }
+}
+
 const EVENTS = [
   { day: 2, start: 10, hours: 2, name: 'Charla: Introducción a Docker', kind: 'conference', location: 'Auditorio' },
   { day: 5, start: 16, hours: 1.5, name: 'Rush 01 kick-off', kind: 'rush', location: 'Cluster 1' },
@@ -65,18 +75,23 @@ export function mockAgenda({ from, to }) {
     EVENTS.forEach((t, i) => {
       const begin = at(y, m, t.day, t.start)
       if (!inRange(begin, from, to)) return
+      const byDefault = i % 3 === 0
+      const subscribed = demoSubscriptions.get(base + i) ?? byDefault
       items.push({
         id: `event-${base + i}`,
+        eventId: base + i,
         type: 'event',
-        subscribed: i % 3 === 0,
+        subscribed,
         kind: t.kind,
         name: t.name,
-        description: 'Evento de ejemplo. Configura FT_CLIENT_ID y FT_CLIENT_SECRET para ver los de la intra.',
+        description:
+          'Evento de ejemplo con **Markdown**, como los de la intra.\n\n- Trae tu portátil\n- Plazas limitadas\n\nMás información en [la intra](https://intra.42.fr).\n\nConfigura FT_CLIENT_ID y FT_CLIENT_SECRET para ver los de verdad.',
         location: t.location,
         beginAt: begin.toISOString(),
         endAt: new Date(begin.getTime() + t.hours * 3_600_000).toISOString(),
         maxPeople: 50,
-        subscribers: 12,
+        subscribers: 12 + Number(subscribed) - Number(byDefault),
+        cancellationLimitHours: t.kind === 'hackathon' ? 24 : 0,
       })
     })
 
@@ -85,6 +100,7 @@ export function mockAgenda({ from, to }) {
       if (!inRange(begin, from, to)) return
       items.push({
         id: `exam-${base + i}`,
+        examId: base + i,
         type: 'exam',
         subscribed: i === 0,
         kind: 'exam',
@@ -142,9 +158,12 @@ export function mockAgenda({ from, to }) {
       const d = now.getDate()
       const review = at(y, m, d, 15.5)
       if (inRange(review, from, to)) {
+        const subscribed = demoSubscriptions.get(base + 99) ?? false
         items.push({
           id: `event-${base + 99}`,
+          eventId: base + 99,
           type: 'event',
+          subscribed,
           kind: 'event',
           name: 'Code review entre estudiantes',
           description: 'Evento de ejemplo generado para hoy.',
@@ -152,7 +171,8 @@ export function mockAgenda({ from, to }) {
           beginAt: review.toISOString(),
           endAt: at(y, m, d, 17).toISOString(),
           maxPeople: 20,
-          subscribers: 7,
+          subscribers: 7 + Number(subscribed),
+          cancellationLimitHours: 0,
         })
       }
       const slot = at(y, m, d, 18)

@@ -49,8 +49,12 @@ El prototipo actual demuestra la idea central de Calendar42 mediante:
 - vista mensual;
 - vista diaria organizada por horas;
 - visualización de información temporal procedente de 42;
-- filtros para trabajar con diferentes categorías;
-- una primera estructura de capas para eventos, exámenes, slots y correcciones.
+- filtros para trabajar con las categorías del usuario: sus eventos, sus exámenes, sus slots y sus correcciones;
+- lista de eventos y exámenes disponibles (sin inscripción) junto al calendario, con nombre y franja horaria;
+- ficha completa de cada elemento al pulsarlo, que ocupa el sitio de la vista del día (toda la pantalla en móvil) hasta cerrarla con su botón;
+- descripción de eventos y exámenes renderizada como Markdown, igual que en la intra;
+- aviso de slot libre u ocupado en la ficha, según el evento o examen se solape con lo que el estudiante ya tiene en su agenda;
+- apuntarse y borrarse de un evento desde la propia ficha, cuando la intra lo permite;
 - visualización de la coalición del usuario en la cabecera.
 
 Esta versión debe entenderse como un **primer prototipo funcional**, todavía en una fase temprana de desarrollo.
@@ -64,13 +68,12 @@ Durante el desarrollo hemos identificado y estudiado técnicamente varias accion
 Estas funcionalidades **no están implementadas todavía**, pero forman parte del siguiente paso natural del proyecto:
 
 - inscribirse a un examen;
-- apuntarse a un evento;
 - agendar una corrección;
 - visualizar slots abiertos de otros estudiantes y seleccionar uno para recibir una corrección.
 
 Estas acciones requerirán implementar y validar las operaciones correspondientes sobre la API de 42.
 
-La diferencia es importante: **el prototipo actual demuestra la capa de visualización y planificación; la siguiente iteración convertiría esa capa en una herramienta de interacción y gestión.**
+La diferencia es importante: **el prototipo actual demuestra la capa de visualización y planificación, con una primera acción de gestión (apuntarse y borrarse de eventos); la siguiente iteración completaría esa capa de interacción.**
 
 ## Ideación y prototipado
 
@@ -128,9 +131,14 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 | Recurso | Para qué | Token |
 |---|---|---|
 | `GET /v2/me` | Usuario y campus principal tras el login | usuario |
-| `GET /v2/users/:id/coalitions` | Coalición del usuario (nombre, color y emblema para la cabecera) | usuario |
+| `GET /v2/users/:id/coalitions` | Coaliciones a las que ha pertenecido el usuario (piscina, discovery, cursus...) | usuario |
+| `GET /v2/blocs` | Coaliciones del cursus actual en el campus, para mostrar esa y no la de la piscina | usuario |
 | `GET /v2/campus/:id/events` | Eventos del campus | usuario |
 | `GET /v2/users/:id/events` | Eventos en los que el usuario está inscrito | usuario |
+| `GET /v2/users/:id/events_users` | Inscripción del usuario a un evento (su id hace falta para borrarse) | usuario |
+| `POST /v2/events_users` | Apuntarse a un evento | usuario |
+| `DELETE /v2/events_users/:id` | Borrarse de un evento | usuario |
+| `GET /v2/events/:id` | Releer un evento tras apuntarse o borrarse (número de inscritos) | usuario |
 | `GET /v2/campus/:id/exams` | Exámenes del campus | app |
 | `GET /v2/users/:id/exams` | Exámenes en los que el usuario está inscrito | app |
 | `GET /v2/me/slots` | Slots de corrección del usuario | usuario |
@@ -141,9 +149,13 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 
 - Los endpoints de exámenes devuelven `403` a los estudiantes, por lo que los exámenes se consultan utilizando el token de aplicación mediante `client_credentials`.
 - La lista de inscritos de un examen (`/v2/exams/:id/exams_users`) está restringida a staff, por lo que para conocer los exámenes del usuario se utiliza `/v2/users/:id/exams`.
+- `/v2/users/:id/coalitions` no indica a qué cursus pertenece cada coalición, por lo que un alumno que hizo la piscina recibe varias. La del cursus actual se identifica cruzándolas con los blocs del cursus (`/v2/blocs`).
 - Los endpoints relacionados con slots y correcciones requieren el scope `projects`.
+- Apuntarse y borrarse de eventos (`/v2/events_users`) requiere el scope `profile`; sin él la intra responde `403 Insufficient scope`. Si la app OAuth no lo tenía activado, hay que activarlo en la intra y volver a iniciar sesión para que el token lo incluya.
+- La API no deja a un estudiante inscribirse ni borrarse de un examen (`/v2/exams_users`), así que en los exámenes el botón sale desactivado con ese motivo.
 - La API tiene un límite de 2 peticiones por segundo. Las llamadas pasan por un limitador.
-- La agenda se cachea durante dos minutos por usuario y rango de fechas.
+- Para borrarse de un evento hace falta el id de la inscripción (`events_user`), no el del evento; se obtiene de `/v2/users/:id/events_users`. La intra valida aforo, fechas y plazo de cancelación: si rechaza la operación, la app muestra su motivo.
+- La agenda se cachea durante dos minutos por usuario y rango de fechas, y se invalida al apuntarse o borrarse de un evento.
 - El token de autenticación permanece en el backend y no se expone al navegador.
 
 ## Puesta en marcha
@@ -158,7 +170,7 @@ La aplicación debe utilizar como redirect URI:
 
 y los scopes:
 
-`public` y `projects`.
+`public`, `projects` y `profile` (este último hace falta para apuntarse y borrarse de eventos).
 
 ```bash
 nvm install 22
@@ -191,6 +203,8 @@ Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejem
 | `GET /api/auth/me` | Usuario de la sesión |
 | `POST /api/auth/logout` | Cierra la sesión |
 | `GET /api/agenda?from&to` | Construye la agenda entre dos fechas ISO |
+| `POST /api/events/:id/subscription` | Apunta al usuario al evento |
+| `DELETE /api/events/:id/subscription` | Borra al usuario del evento |
 
 ## Estructura
 
@@ -198,8 +212,8 @@ Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejem
 server/   Express: OAuth, sesiones y /api/agenda
           intra.js habla con la API de 42
 
-src/      React: Calendar, DayView, TypeFilter, LoginView
-          y carga de la agenda en App.jsx
+src/      React: Calendar, DayView, TypeFilter, AvailableList, ItemPopover,
+          LoginView; carga de la agenda y acciones sobre eventos en App.jsx
 ```
 
 ## Evolución del producto
@@ -210,7 +224,7 @@ A partir de ahí, el proyecto puede evolucionar en varias direcciones.
 
 ### 1. Convertir la agenda en una herramienta de gestión
 
-Las cuatro acciones ya identificadas técnicamente —inscripción a exámenes, inscripción a eventos, agendado de correcciones y selección de slots abiertos— serían el siguiente paso para pasar de una agenda principalmente informativa a una herramienta de interacción con 42.
+La inscripción a eventos ya está disponible. Las tres acciones restantes —inscripción a exámenes, agendado de correcciones y selección de slots abiertos— serían el siguiente paso para pasar de una agenda principalmente informativa a una herramienta de interacción con 42.
 
 ### 2. Integración con calendarios personales
 

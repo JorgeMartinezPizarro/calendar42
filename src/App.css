@@ -261,3 +261,10 @@
     height: auto;
   }
 }
+
+/* En pantallas anchas la columna izquierda hace scroll si no cabe todo. */
+@media (min-width: 900px) {
+  .app__sidebar {
+    overflow-y: auto;
+  }
+}

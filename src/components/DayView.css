@@ -48,6 +48,22 @@
   overflow-y: auto;
 }
 
+/* Ficha de un elemento: sustituye a las horas y llena la caja de la vista
+   del día. En móvil ocupa toda la pantalla. */
+.dayview__panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+@media (max-width: 899px) {
+  .dayview__panel {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
+}
+
 /* Capa de eventos sobre la rejilla, a la derecha de las etiquetas de hora. */
 .dayview__events {
   position: absolute;
@@ -71,7 +87,19 @@
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
-  cursor: default;
+  cursor: pointer;
+}
+
+/* Al pulsar (o Enter) se abre la ficha completa en lugar de las horas (ver ItemPopover). */
+.dayview__event:hover,
+.dayview__event:focus-visible {
+  background: color-mix(in srgb, var(--ev-color) 32%, transparent);
+  outline: none;
+}
+
+.dayview__event:focus-visible,
+.dayview__event--open {
+  box-shadow: 0 0 0 2px var(--ev-color);
 }
 
 .dayview__event-name {
@@ -112,6 +140,11 @@
 .dayview__event--mine {
   background: color-mix(in srgb, var(--ev-color) 38%, transparent);
   border-left-width: 4px;
+}
+
+.dayview__event--mine:hover,
+.dayview__event--mine:focus-visible {
+  background: color-mix(in srgb, var(--ev-color) 48%, transparent);
 }
 
 .dayview__event-badge {

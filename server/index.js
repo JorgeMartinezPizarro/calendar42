@@ -9,8 +9,10 @@ import {
   fetchMe,
   hasAppCredentials,
   refreshTokens,
+  subscribeToEvent,
+  unsubscribeFromEvent,
 } from './intra.js'
-import { mockAgenda, mockCoalition } from './mock.js'
+import { mockAgenda, mockCoalition, mockSetSubscription } from './mock.js'
 import {
   SESSION_COOKIE,
   STATE_COOKIE,
@@ -208,6 +210,62 @@ app.get('/api/agenda', requireSession, async (req, res) => {
     res.status(502).json({ error: err.message })
   }
 })
+
+// ---------------------------------------------------------------------------
+// Inscripción a eventos
+// ---------------------------------------------------------------------------
+
+/** Olvida la agenda cacheada de un usuario (tras apuntarse o borrarse de algo). */
+function forgetAgendaOf(source, userId) {
+  const prefix = `${source}:${userId}:`
+  for (const key of agendaCache.keys()) {
+    if (key.startsWith(prefix)) agendaCache.delete(key)
+  }
+}
+
+/**
+ * POST   /api/events/:id/subscription  → apuntarse al evento
+ * DELETE /api/events/:id/subscription  → borrarse del evento
+ * Respuesta: { ok, subscribed, subscribers } (subscribers puede ser null si
+ * la intra no dejó releer el evento). Si la intra rechaza la operación
+ * (aforo completo, plazo de cancelación...), 409 con su motivo.
+ */
+async function setSubscription(req, res, subscribed) {
+  const eventId = Number(req.params.id)
+  if (!Number.isInteger(eventId) || eventId <= 0) {
+    return res.status(400).json({ error: 'Id de evento inválido' })
+  }
+  const session = req.session
+  const source = session.demo ? 'mock' : 'intra'
+
+  try {
+    let event = null
+    if (session.demo) {
+      mockSetSubscription(eventId, subscribed)
+    } else {
+      const token = await validAccessToken(session)
+      const args = { eventId, userId: session.user.id }
+      event = subscribed ? await subscribeToEvent(token, args) : await unsubscribeFromEvent(token, args)
+    }
+    forgetAgendaOf(source, session.user.id)
+    res.json({ ok: true, subscribed, subscribers: event?.subscribers ?? null })
+  } catch (err) {
+    console.error('[events]', err.message)
+    if (err.status === 401) return sessionExpired(req, res)
+    const status = { 403: 403, 404: 404, 422: 409 }[err.status] ?? 502
+    // Sin el scope "profile" la intra responde 403 "Insufficient scope".
+    const missingScope = err.status === 403 && /scope/i.test(String(err.reason))
+    const message = missingScope
+      ? 'La sesión no tiene el scope "profile", necesario para apuntarse. Actívalo en la app OAuth de la intra, cierra sesión y vuelve a entrar.'
+      : err.reason
+        ? `La intra no ha aceptado la operación: ${err.reason}`
+        : err.message
+    res.status(status).json({ error: message })
+  }
+}
+
+app.post('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, true))
+app.delete('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, false))
 
 // Compatibilidad con el nombre anterior.
 app.get('/api/events', (req, res) => res.redirect(307, `/api/agenda${req.url.slice(req.path.length)}`))

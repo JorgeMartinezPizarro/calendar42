@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { TYPE_COLORS } from '../agendaTypes.js'
+import { useNow } from '../hooks/useNow.js'
 import { addDays, formatLongDate, formatTime, isSameDay, startOfDay } from '../utils/date.js'
 import './DayView.css'
 
@@ -9,15 +10,6 @@ const MINUTES_PER_DAY = 24 * 60
 
 function pad(n) {
   return String(n).padStart(2, '0')
-}
-
-function useNow(intervalMs = 60_000) {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), intervalMs)
-    return () => clearInterval(id)
-  }, [intervalMs])
-  return now
 }
 
 /**
@@ -77,22 +69,45 @@ function itemMeta(item) {
   }
 }
 
-function DayView({ date, items = [], status }) {
+/**
+ * Vista diaria por horas.
+ * - panel: ficha de un elemento. Mientras hay ficha, las horas desaparecen y
+ *   la ficha ocupa su sitio (en móvil, toda la pantalla, por CSS).
+ * - openItemId: id del elemento cuya ficha está abierta, para resaltarlo.
+ * - onOpenItem(item): abrir la ficha (clic, Enter o Espacio).
+ */
+function DayView({ date, items = [], status, panel = null, openItemId = null, onOpenItem }) {
   const now = useNow()
   const scrollRef = useRef(null)
   const isToday = isSameDay(date, now)
   const nowOffsetPct = ((now.getHours() * 60 + now.getMinutes()) / MINUTES_PER_DAY) * 100
   const laidOut = layoutItems(items, date)
+  const showingPanel = Boolean(panel)
 
-  // When the day changes, scroll to the current hour (today) or to a sensible
-  // morning hour so the user does not land on 00:00.
+  // Al cambiar de día (o al volver de la ficha), llevar el scroll a la hora
+  // actual (hoy) o a una hora razonable de la mañana, no a las 00:00.
   useEffect(() => {
     const container = scrollRef.current
     if (!container) return
     const hourHeight = container.scrollHeight / HOURS.length
     const targetHour = isToday ? new Date().getHours() : DEFAULT_SCROLL_HOUR
     container.scrollTop = Math.max(0, (targetHour - 1) * hourHeight)
-  }, [date, isToday])
+  }, [date, isToday, showingPanel])
+
+  if (showingPanel) {
+    return (
+      <section className="dayview dayview--panel" aria-label="Detalle del elemento">
+        <div className="dayview__panel">{panel}</div>
+      </section>
+    )
+  }
+
+  const openWithKeyboard = (item) => (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onOpenItem(item)
+    }
+  }
 
   return (
     <section className="dayview" aria-label="Vista del día por horas">
@@ -123,7 +138,6 @@ function DayView({ date, items = [], status }) {
               const height = ((endMin - startMin) / MINUTES_PER_DAY) * 100
               const width = 100 / lanes
               const left = lane * width
-              const tooltip = [item.name, itemMeta(item), item.description].filter(Boolean).join('\n')
 
               return (
                 <article
@@ -134,6 +148,7 @@ function DayView({ date, items = [], status }) {
                     item.kind && `dayview__event--kind-${item.kind}`,
                     item.done && 'dayview__event--done',
                     item.subscribed && 'dayview__event--mine',
+                    item.id === openItemId && 'dayview__event--open',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -144,7 +159,10 @@ function DayView({ date, items = [], status }) {
                     left: `calc(${left}% + 2px)`,
                     width: `calc(${width}% - 4px)`,
                   }}
-                  title={tooltip}
+                  tabIndex={0}
+                  aria-label={`${item.name}, ${itemMeta(item)}`}
+                  onClick={() => onOpenItem(item)}
+                  onKeyDown={openWithKeyboard(item)}
                 >
                   <strong className="dayview__event-name">
                     {item.subscribed && (
