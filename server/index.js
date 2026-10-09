@@ -488,7 +488,7 @@ async function setExamSubscription(req, res, subscribed) {
   if (!session.demo) {
     return res.status(403).json({
       error:
-        'La API de la intra no deja inscribirse a exámenes con la cuenta de un estudiante; está pendiente de que el staff autorice la aplicación.',
+        'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.',
     })
   }
   mockSetExamSubscription(examId, subscribed)

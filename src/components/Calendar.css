@@ -76,7 +76,9 @@
   background: var(--cal-accent-soft);
 }
 
-.calendar__day--outside {
+/* Días de otros meses y días ya pasados: atenuados, con sus marcas también. */
+.calendar__day--outside,
+.calendar__day--past {
   color: var(--cal-muted);
   opacity: 0.6;
 }

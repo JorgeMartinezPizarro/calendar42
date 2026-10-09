@@ -58,6 +58,8 @@ function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayT
           const className = [
             'calendar__day',
             !inMonth && 'calendar__day--outside',
+            // Días ya pasados: atenuados como los de otros meses, su información ya no cuenta.
+            inMonth && !isToday && date < today && 'calendar__day--past',
             isToday && 'calendar__day--today',
             isSelected && 'calendar__day--selected',
             hasItems && 'calendar__day--has-items',

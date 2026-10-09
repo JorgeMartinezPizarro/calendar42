@@ -1,7 +1,7 @@
 import { isMine } from './agendaTypes.js'
 
 const EXAM_REASON =
-  'La API de la intra no deja apuntarse ni borrarse de un examen con la cuenta de un estudiante: hazlo desde la intra.'
+  'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.'
 const SCOPE_REASON =
   'La sesión no tiene el scope "profile", necesario para apuntarse. Actívalo en la app OAuth de la intra, cierra sesión y vuelve a entrar.'
 

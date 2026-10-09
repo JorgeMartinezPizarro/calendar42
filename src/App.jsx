@@ -662,11 +662,6 @@ function App() {
           {mode === 'exams' && (
             <ItemList
               title="Próximos exámenes"
-              note={
-                auth.demo
-                  ? 'Demo: aquí puedes apuntarte a los exámenes. Con la intra real aún no se puede: está pendiente de que el staff de 42 autorice la aplicación.'
-                  : null
-              }
               items={availableExams}
               status={status}
               emptyText="Ningún examen disponible en el próximo mes"

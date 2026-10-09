@@ -7,16 +7,14 @@ import './ItemList.css'
  * pulsar uno se abre su ficha en el sitio de la vista del día.
  * - items: ya filtrados (solo futuros) y ordenados por el padre
  * - openItemId: id del elemento cuya ficha está abierta, para resaltarlo
- * - note: aviso opcional bajo el título
  */
-function ItemList({ title, note = null, items, status, emptyText, openItemId = null, onOpenItem }) {
+function ItemList({ title, items, status, emptyText, openItemId = null, onOpenItem }) {
   return (
     <section className="itemlist" aria-label={title}>
       <h2 className="itemlist__title">
         {title}
         <span className="itemlist__count">{items.length}</span>
       </h2>
-      {note && <p className="itemlist__note">{note}</p>}
 
       {items.length === 0 ? (
         <p className="itemlist__empty">{status === 'loading' ? 'Cargando…' : emptyText}</p>
