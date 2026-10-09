@@ -1,6 +1,6 @@
 .modebar {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
 }
 
@@ -61,4 +61,19 @@
 
 .modebar__note--error {
   color: #ff5c5c;
+}
+
+/* Móvil: botones más bajos, sin desbordar. */
+@media (max-width: 899px) {
+  .modebar {
+    gap: 0.4rem;
+  }
+
+  .modebar__button {
+    padding: 0.5rem 0.5rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

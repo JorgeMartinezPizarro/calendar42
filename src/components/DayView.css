@@ -16,8 +16,9 @@
 
 .dayview__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem 0.75rem;
   padding: 1rem;
   border-bottom: 1px solid var(--dv-border);
 }
@@ -37,11 +38,49 @@
   color: #fff;
 }
 
-/* Pista del modo "Crear slots". */
-.dayview__badge--hint {
-  background: transparent;
+/* Pista del modo "Crear slots": línea propia bajo el título. */
+.dayview__hint {
+  flex-basis: 100%;
+  font-size: 0.75rem;
   color: var(--dv-muted);
-  border: 1px dashed var(--dv-muted);
+}
+
+/* Título largo en escritorio, corto en móvil. */
+.dayview__title-short {
+  display: none;
+}
+
+/* Volver al mes (solo móvil) y flechas de día anterior / siguiente. */
+.dayview__back,
+.dayview__nav button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--dv-border);
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.dayview__back {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.dayview__nav {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.dayview__nav button {
+  min-width: 2rem;
+  min-height: 2rem;
+  font-size: 1rem;
+}
+
+.dayview__back:hover,
+.dayview__nav button:hover {
+  border-color: var(--dv-accent);
 }
 
 .dayview__count {
@@ -213,7 +252,8 @@
 .dayview__hours--selectable {
   cursor: crosshair;
   user-select: none;
-  touch-action: none;
+  /* Con el dedo las horas siguen haciendo scroll: la franja se marca con un toque. */
+  touch-action: pan-y;
 }
 
 /* Franja marcada (arrastrando o pendiente de crear). */
@@ -295,4 +335,84 @@
   height: 10px;
   border-radius: 50%;
   background: var(--dv-now);
+}
+
+/* Tiradores de la franja marcada: lo único de ella que recibe el puntero.
+   Zona de toque generosa, con una barrita visible en el centro. */
+.dayview__handle {
+  position: absolute;
+  left: 50%;
+  width: 3rem;
+  height: 1.75rem;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: ns-resize;
+  display: grid;
+  place-items: center;
+}
+
+.dayview__handle::after {
+  content: '';
+  width: 2rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--dv-slot);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+.dayview__handle--start {
+  top: 0;
+}
+
+.dayview__handle--end {
+  top: 100%;
+}
+
+/* Contenido fijo bajo las horas (móvil: el panel de crear slot). */
+.dayview__footer {
+  flex: none;
+  border-top: 1px solid var(--dv-border);
+}
+
+/* ---- móvil -------------------------------------------------------------- */
+@media (max-width: 899px) {
+  .dayview__header {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .dayview__title {
+    font-size: 1rem;
+  }
+
+  .dayview__title-long,
+  .dayview__count {
+    display: none;
+  }
+
+  .dayview__title-short {
+    display: inline;
+  }
+
+  .dayview__nav {
+    margin-left: auto;
+  }
+
+  .dayview__nav button {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+  }
+
+  .dayview__back {
+    min-height: 2.5rem;
+  }
+
+  .dayview__hour {
+    grid-template-columns: 3rem 1fr;
+  }
+
+  .dayview__events,
+  .dayview__now {
+    left: 3rem;
+  }
 }

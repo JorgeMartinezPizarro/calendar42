@@ -23,7 +23,7 @@ function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayT
   const goToNext = () => onViewDateChange(addMonths(viewDate, 1))
   const goToToday = () => {
     onViewDateChange(new Date(today.getFullYear(), today.getMonth(), 1))
-    onSelectDate(today)
+    onSelectDate(today, 'today')
   }
 
   return (

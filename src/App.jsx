@@ -13,14 +13,16 @@ import { fetchAgenda } from './api/agenda.js'
 import { fetchUpcomingEvents, setEventSubscription } from './api/events.js'
 import { fetchProjects } from './api/projects.js'
 import { bookCorrection, createSlot, deleteSlots, fetchProjectSlots } from './api/slots.js'
+import { MOBILE_QUERY, TOUCH_QUERY, useMediaQuery } from './hooks/useMediaQuery.js'
 import { useNow } from './hooks/useNow.js'
 import {
+  MIN_SLOT_MINUTES,
   bookingState,
   overlappingItems,
   slotDeleteState,
   subscriptionState,
 } from './subscription.js'
-import { addMonths, getMonthGridRange, toDateKey } from './utils/date.js'
+import { addDays, addMonths, getMonthGridRange, toDateKey } from './utils/date.js'
 import './App.css'
 
 const EMPTY = []
@@ -312,11 +314,35 @@ function App() {
   const openItemCard = useCallback((item) => setOpenId(item.id), [])
   const closeItem = useCallback(() => setOpenId(null), [])
 
-  // Elegir un día en el calendario cierra la ficha para enseñar ese día.
-  const selectDate = useCallback((date) => {
+  // ---- móvil: dos vistas, Mes y Día ---------------------------------------
+  // En pantallas estrechas no cabe todo apilado: la vista Mes lleva el
+  // calendario, los modos y su panel; la vista Día, las horas a pantalla
+  // completa. Tocar un día abre la vista Día; su botón "‹ Mes" vuelve.
+  const isMobile = useMediaQuery(MOBILE_QUERY)
+  const isTouch = useMediaQuery(TOUCH_QUERY)
+  const [mobileView, setMobileView] = useState('month')
+
+  useEffect(() => {
+    if (isMobile) window.scrollTo(0, 0)
+  }, [isMobile, mobileView])
+
+  // Elegir un día en el calendario cierra la ficha para enseñar ese día y, en
+  // móvil, abre la vista Día (salvo con "Hoy", que solo vuelve al mes actual).
+  const selectDate = useCallback((date, source) => {
     setSelectedDate(date)
     setOpenId(null)
+    if (source !== 'today') setMobileView('day')
   }, [])
+
+  // Día anterior o siguiente desde la vista del día; el calendario le sigue.
+  const shiftDay = (delta) => {
+    const next = addDays(selectedDate, delta)
+    setSelectedDate(next)
+    setOpenId(null)
+    if (monthKey(next) !== monthKey(viewDate)) {
+      setViewDate(new Date(next.getFullYear(), next.getMonth(), 1))
+    }
+  }
 
   const changeMode = useCallback((next) => {
     setMode(next)
@@ -450,6 +476,23 @@ function App() {
     setPendingRange(null)
   }, [mode, selectedDate])
 
+  // Ajuste fino de la franja marcada, en pasos de 15 min, sin salir del día y
+  // respetando la duración mínima.
+  const adjustPending = (edge, deltaMinutes) =>
+    setPendingRange((range) => {
+      if (!range) return range
+      const dayStart = new Date(range.beginAt.getFullYear(), range.beginAt.getMonth(), range.beginAt.getDate())
+      const dayEnd = addDays(dayStart, 1)
+      const min = MIN_SLOT_MINUTES * 60_000
+      const delta = deltaMinutes * 60_000
+      if (edge === 'start') {
+        const beginAt = new Date(Math.min(Math.max(range.beginAt.getTime() + delta, dayStart.getTime()), range.endAt.getTime() - min))
+        return { ...range, beginAt }
+      }
+      const endAt = new Date(Math.max(Math.min(range.endAt.getTime() + delta, dayEnd.getTime()), range.beginAt.getTime() + min))
+      return { ...range, endAt }
+    })
+
   const createPendingSlot = async () => {
     if (!pendingRange) return
     setSlotAction({ busy: true, error: null, created: null })
@@ -505,8 +548,31 @@ function App() {
     />
   )
 
+  // El panel de crear slot va en la columna izquierda y, en móvil, también al
+  // pie de la vista Día, que es donde se marca la franja.
+  const slotCreator = (
+    <SlotCreator
+      pending={pendingRange}
+      action={slotAction}
+      now={now}
+      touch={isTouch}
+      onCreate={createPendingSlot}
+      onCancel={() => setPendingRange(null)}
+      onAdjust={adjustPending}
+    />
+  )
+
+  const appClass = [
+    'app',
+    coalition && 'app--coalition',
+    isMobile && `app--mobile-${mobileView}`,
+    panel && 'app--has-panel',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <div className={`app${coalition ? ' app--coalition' : ''}`} style={coalitionStyle}>
+    <div className={appClass} style={coalitionStyle}>
       <header className="app__header">
         <h1>Calendar42</h1>
         <p className="app__subtitle">Calendario para estudiantes de 42 Madrid</p>
@@ -600,15 +666,7 @@ function App() {
               onOpenItem={openItemCard}
             />
           )}
-          {mode === 'slots' && (
-            <SlotCreator
-              pending={pendingRange}
-              action={slotAction}
-              now={now}
-              onCreate={createPendingSlot}
-              onCancel={() => setPendingRange(null)}
-            />
-          )}
+          {mode === 'slots' && slotCreator}
         </aside>
         <section className="app__content">
           <DayView
@@ -619,8 +677,12 @@ function App() {
             openItemId={openItem?.id ?? null}
             onOpenItem={openItemCard}
             selectable={mode === 'slots'}
+            touchSelect={isTouch}
             draft={mode === 'slots' ? pendingRange : null}
             onRangeSelect={selectRange}
+            onShiftDay={shiftDay}
+            onBack={isMobile ? () => setMobileView('month') : undefined}
+            footer={isMobile && mode === 'slots' ? slotCreator : null}
           />
         </section>
       </main>

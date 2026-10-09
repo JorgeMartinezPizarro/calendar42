@@ -2,13 +2,25 @@ import { useEffect, useRef, useState } from 'react'
 import { itemColor } from '../agendaTypes.js'
 import { useNow } from '../hooks/useNow.js'
 import { MIN_SLOT_MINUTES } from '../subscription.js'
-import { addDays, formatLongDate, formatTime, isSameDay, startOfDay } from '../utils/date.js'
+import {
+  addDays,
+  capitalize,
+  formatLongDate,
+  formatShortDay,
+  formatTime,
+  isSameDay,
+  startOfDay,
+} from '../utils/date.js'
 import './DayView.css'
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
 const DEFAULT_SCROLL_HOUR = 8
 const MINUTES_PER_DAY = 24 * 60
 const SNAP_MINUTES = 15
+// Franja que crea un toque en táctil; luego se ajusta con los tiradores.
+const TAP_SLOT_MINUTES = 60
+// Más movimiento que esto entre tocar y soltar es un scroll, no un toque.
+const TAP_TOLERANCE_PX = 10
 // Por debajo de esta duración no caben dos líneas: nombre y hora van en una.
 const COMPACT_MINUTES = 45
 
@@ -85,9 +97,14 @@ function itemMeta(item) {
  *   la ficha ocupa su sitio (en móvil, toda la pantalla, por CSS).
  * - openItemId: id del elemento cuya ficha está abierta, para resaltarlo.
  * - onOpenItem(item): abrir la ficha (clic, Enter o Espacio).
- * - selectable: en el modo "Crear slots", arrastrar sobre las horas marca una
- *   franja (bloques de 15 min) y llama a onRangeSelect({ beginAt, endAt }).
- * - draft: franja ya marcada y pendiente de crear, que se dibuja en punteado.
+ * - selectable: modo "Crear slots". Con ratón, arrastrar sobre las horas marca
+ *   una franja (bloques de 15 min); con el dedo (touchSelect), un toque marca
+ *   una hora y el resto de las horas sigue haciendo scroll. La franja marcada
+ *   (draft) lleva tiradores arriba y abajo para ajustarla. Cada cambio llama a
+ *   onRangeSelect({ beginAt, endAt }).
+ * - onShiftDay(delta): flechas de día anterior y siguiente.
+ * - onBack: en móvil, botón "‹ Mes" para volver al calendario.
+ * - footer: contenido fijo bajo las horas (en móvil, el panel de crear slot).
  */
 function DayView({
   date,
@@ -97,13 +114,19 @@ function DayView({
   openItemId = null,
   onOpenItem,
   selectable = false,
+  touchSelect = false,
   draft = null,
   onRangeSelect,
+  onShiftDay,
+  onBack,
+  footer = null,
 }) {
   const now = useNow()
   const scrollRef = useRef(null)
   const hoursRef = useRef(null)
-  const [drag, setDrag] = useState(null) // { anchor, startMin, endMin } mientras se arrastra
+  const tapRef = useRef(null) // { x, y } del toque en curso (táctil)
+  const [drag, setDrag] = useState(null) // { anchor, startMin, endMin } mientras se arrastra (ratón)
+  const [resize, setResize] = useState(null) // { edge, startMin, endMin } mientras se mueve un tirador
   const isToday = isSameDay(date, now)
   const nowOffsetPct = ((now.getHours() * 60 + now.getMinutes()) / MINUTES_PER_DAY) * 100
   const laidOut = layoutItems(items, date)
@@ -134,16 +157,31 @@ function DayView({
     }
   }
 
-  // ---- arrastrar para marcar una franja (modo "Crear slots") ----------------
-  const minutesAt = (clientY) => {
+  // ---- marcar una franja (modo "Crear slots") -------------------------------
+  const dayStart = startOfDay(date)
+
+  const minutesAt = (clientY, round = Math.round) => {
     const rect = hoursRef.current.getBoundingClientRect()
     const raw = ((clientY - rect.top) / rect.height) * MINUTES_PER_DAY
-    const snapped = Math.round(raw / SNAP_MINUTES) * SNAP_MINUTES
+    const snapped = round(raw / SNAP_MINUTES) * SNAP_MINUTES
     return Math.max(0, Math.min(MINUTES_PER_DAY, snapped))
   }
 
+  const commit = (startMin, endMin) =>
+    onRangeSelect?.({
+      beginAt: new Date(dayStart.getTime() + startMin * 60_000),
+      endAt: new Date(dayStart.getTime() + endMin * 60_000),
+    })
+
   const onPointerDown = (e) => {
-    if (!selectable || e.button !== 0 || e.target.closest('.dayview__event')) return
+    if (!selectable || e.target.closest('.dayview__event, .dayview__handle')) return
+    // Dedo o lápiz: sin preventDefault, para que las horas sigan haciendo
+    // scroll; si se suelta casi en el mismo sitio, es un toque.
+    if (e.pointerType !== 'mouse') {
+      tapRef.current = { x: e.clientX, y: e.clientY }
+      return
+    }
+    if (e.button !== 0) return
     e.preventDefault()
     try {
       hoursRef.current.setPointerCapture(e.pointerId)
@@ -166,36 +204,93 @@ function DayView({
     })
   }
 
-  const onPointerUp = () => {
-    if (!drag) return
-    const dayStart = startOfDay(date)
-    onRangeSelect?.({
-      beginAt: new Date(dayStart.getTime() + drag.startMin * 60_000),
-      endAt: new Date(dayStart.getTime() + drag.endMin * 60_000),
-    })
-    setDrag(null)
+  const onPointerUp = (e) => {
+    if (drag) {
+      commit(drag.startMin, drag.endMin)
+      setDrag(null)
+      return
+    }
+    const tap = tapRef.current
+    tapRef.current = null
+    if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < TAP_TOLERANCE_PX) {
+      const start = Math.min(minutesAt(e.clientY, Math.floor), MINUTES_PER_DAY - TAP_SLOT_MINUTES)
+      commit(start, start + TAP_SLOT_MINUTES)
+    }
   }
 
-  // Franja en punteado: la que se está arrastrando o la pendiente de crear.
+  // Un scroll con el dedo cancela el puntero: no hay toque.
+  const onPointerCancel = () => {
+    setDrag(null)
+    tapRef.current = null
+  }
+
+  // Franja en punteado: la que se está arrastrando o ajustando, o la pendiente de crear.
   let draftBlock = null
   if (drag) {
     draftBlock = { startMin: drag.startMin, endMin: drag.endMin }
+  } else if (resize) {
+    draftBlock = { startMin: resize.startMin, endMin: resize.endMin }
   } else if (draft && isSameDay(draft.beginAt, date)) {
-    const dayStart = startOfDay(date)
     draftBlock = {
       startMin: (draft.beginAt - dayStart) / 60_000,
       endMin: Math.min(MINUTES_PER_DAY, (draft.endAt - dayStart) / 60_000),
     }
   }
 
+  // Tiradores de la franja: arrastrarlos mueve el inicio o el fin.
+  const startResize = (edge) => (e) => {
+    if (!draftBlock) return
+    e.stopPropagation()
+    e.preventDefault()
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // sin captura, el tirador solo sigue al puntero mientras esté encima
+    }
+    setResize({ edge, startMin: draftBlock.startMin, endMin: draftBlock.endMin })
+  }
+
+  const moveResize = (e) => {
+    if (!resize) return
+    const m = minutesAt(e.clientY)
+    setResize((r) =>
+      r.edge === 'start'
+        ? { ...r, startMin: Math.max(0, Math.min(m, r.endMin - MIN_SLOT_MINUTES)) }
+        : { ...r, endMin: Math.min(MINUTES_PER_DAY, Math.max(m, r.startMin + MIN_SLOT_MINUTES)) },
+    )
+  }
+
+  const endResize = () => {
+    if (!resize) return
+    commit(resize.startMin, resize.endMin)
+    setResize(null)
+  }
+
+  const handleProps = (edge) => ({
+    className: `dayview__handle dayview__handle--${edge}`,
+    role: 'slider',
+    'aria-label': edge === 'start' ? 'Inicio del slot' : 'Fin del slot',
+    onPointerDown: startResize(edge),
+    onPointerMove: moveResize,
+    onPointerUp: endResize,
+    onPointerCancel: () => setResize(null),
+  })
+
+  const monthLabel = capitalize(date.toLocaleDateString('es-ES', { month: 'long' }))
+
   return (
     <section className="dayview" aria-label="Vista del día por horas">
       <header className="dayview__header">
-        <h2 className="dayview__title">{formatLongDate(date)}</h2>
-        {isToday && <span className="dayview__badge">Hoy</span>}
-        {selectable && (
-          <span className="dayview__badge dayview__badge--hint">Arrastra para crear un slot</span>
+        {onBack && (
+          <button type="button" className="dayview__back" onClick={onBack} aria-label="Volver al mes">
+            ‹ {monthLabel}
+          </button>
         )}
+        <h2 className="dayview__title">
+          <span className="dayview__title-long">{formatLongDate(date)}</span>
+          <span className="dayview__title-short">{capitalize(formatShortDay(date))}</span>
+        </h2>
+        {isToday && <span className="dayview__badge">Hoy</span>}
         <span className="dayview__count">
           {status === 'loading'
             ? 'Cargando…'
@@ -203,6 +298,23 @@ function DayView({
               ? 'Nada previsto'
               : `${laidOut.length} elemento${laidOut.length === 1 ? '' : 's'}`}
         </span>
+        {onShiftDay && (
+          <span className="dayview__nav">
+            <button type="button" onClick={() => onShiftDay(-1)} aria-label="Día anterior">
+              ‹
+            </button>
+            <button type="button" onClick={() => onShiftDay(1)} aria-label="Día siguiente">
+              ›
+            </button>
+          </span>
+        )}
+        {selectable && (
+          <span className="dayview__hint">
+            {touchSelect
+              ? 'Toca una hora para crear un slot y ajústalo con los tiradores'
+              : 'Arrastra sobre las horas para crear un slot'}
+          </span>
+        )}
       </header>
 
       <div className="dayview__scroll" ref={scrollRef}>
@@ -212,7 +324,7 @@ function DayView({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerCancel={() => setDrag(null)}
+          onPointerCancel={onPointerCancel}
         >
           {HOURS.map((h) => (
             <div key={h} className="dayview__hour">
@@ -277,12 +389,17 @@ function DayView({
                   top: `${(draftBlock.startMin / MINUTES_PER_DAY) * 100}%`,
                   height: `${((draftBlock.endMin - draftBlock.startMin) / MINUTES_PER_DAY) * 100}%`,
                 }}
-                aria-hidden="true"
               >
                 <strong>Nuevo slot</strong>
                 <span>
                   {formatMinutes(draftBlock.startMin)} – {formatMinutes(draftBlock.endMin)}
                 </span>
+                {selectable && !drag && (
+                  <>
+                    <span {...handleProps('start')} aria-valuetext={formatMinutes(draftBlock.startMin)} />
+                    <span {...handleProps('end')} aria-valuetext={formatMinutes(draftBlock.endMin)} />
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -296,6 +413,8 @@ function DayView({
           )}
         </div>
       </div>
+
+      {footer && <div className="dayview__footer">{footer}</div>}
     </section>
   )
 }

@@ -118,3 +118,15 @@
     max-height: none;
   }
 }
+
+/* Móvil: la lista crece con la página, sin scroll propio dentro del scroll. */
+@media (max-width: 899px) {
+  .itemlist__list {
+    max-height: none;
+    min-height: 0;
+  }
+
+  .itemlist__item {
+    padding: 0.5rem;
+  }
+}

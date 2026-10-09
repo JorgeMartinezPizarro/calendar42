@@ -55,7 +55,8 @@ El prototipo actual demuestra la idea central de Calendar42 mediante:
 - Correcciones: los proyectos del alumno aún sin terminar (solo los cerrados, pendientes de corrección, son seleccionables) y, para el elegido, los slots libres de otros estudiantes en el calendario y en las horas del día, desde donde se intenta reservar la corrección;
 - Exámenes: los exámenes disponibles de hoy a dentro de un mes; Eventos: todos los eventos futuros del campus, con los inscritos marcados;
 - eventos externos (tipo `extern` o `partnership` en la intra, o con un enlace de inscripción en la descripción) en un azul más claro que el de los eventos de 42 y con la etiqueta "Externo"; su ficha ofrece "Inscribirse en su web" con ese enlace, y en los de tipo externo "Apuntarme" sale desactivado, porque la intra no gestiona su inscripción;
-- Crear slots: arrastrando sobre las horas del día se marca una franja y se crea el slot de corrección, en bloques de 15 minutos; un slot propio se puede borrar desde su ficha;
+- Crear slots: con ratón, arrastrando sobre las horas del día; con el dedo, tocando una hora. La franja se ajusta con tiradores o en pasos de 15 minutos y se crea el slot de corrección; un slot propio se puede borrar desde su ficha;
+- en móvil, dos vistas: Mes (calendario, modos y su lista) y Día (las horas a pantalla completa, con "‹ Mes" para volver y flechas de día), con la cabecera en una sola línea; la ficha de un elemento ocupa toda la pantalla;
 - lo que la API no permite se indica junto al botón correspondiente con su motivo, y los errores de la intra se muestran en rojo en el mismo sitio;
 - ficha completa de cada elemento al pulsarlo, que ocupa el sitio de la vista del día (toda la pantalla en móvil) hasta cerrarla con su botón;
 - descripción de eventos y exámenes renderizada como Markdown, igual que en la intra;

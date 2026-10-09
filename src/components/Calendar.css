@@ -42,7 +42,8 @@
 .calendar__weekdays,
 .calendar__grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* minmax(0, …): las columnas se encogen en vez de ensanchar la página. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
 }
 
@@ -122,5 +123,55 @@
   .calendar__day {
     min-height: 3rem;
     aspect-ratio: auto;
+  }
+}
+
+/* Móvil: menos relleno para que las 7 columnas quepan incluso a 320 px. */
+@media (max-width: 899px) {
+  .calendar {
+    padding: 0.6rem;
+  }
+
+  .calendar__header {
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .calendar__title {
+    min-width: 0;
+    font-size: 1.05rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .calendar__header button {
+    min-height: 2.4rem;
+    padding: 0.35rem 0.6rem;
+  }
+
+  .calendar__weekdays,
+  .calendar__grid {
+    gap: 2px;
+  }
+
+  .calendar__weekday {
+    padding-bottom: 0.25rem;
+  }
+
+  .calendar__day {
+    min-height: 2.75rem;
+    padding: 0.2rem 0.1rem;
+    aspect-ratio: auto;
+    align-items: center;
+  }
+
+  .calendar__day-number {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .calendar__marks {
+    width: 1.5rem;
   }
 }
