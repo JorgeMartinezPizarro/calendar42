@@ -1,3 +1,5 @@
+import { withEventExtras } from '../externalEvents.js'
+
 async function readJson(res) {
   try {
     return await res.json()
@@ -7,7 +9,7 @@ async function readJson(res) {
 }
 
 function withDates(item) {
-  return { ...item, beginAt: new Date(item.beginAt), endAt: new Date(item.endAt) }
+  return withEventExtras({ ...item, beginAt: new Date(item.beginAt), endAt: new Date(item.endAt) })
 }
 
 /**

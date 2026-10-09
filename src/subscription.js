@@ -22,6 +22,13 @@ export function subscriptionState(item, now = new Date(), { scopeOk = true } = {
   const blocked = (reason) => ({ action, enabled: false, reason })
 
   if (item.type === 'exam') return blocked(EXAM_REASON)
+  if (item.externalKind) {
+    return blocked(
+      item.signupUrl
+        ? 'Evento externo: la inscripción se hace en su web, no en la intra'
+        : 'Evento externo: la intra no gestiona su inscripción; busca el enlace en la descripción',
+    )
+  }
   if (!scopeOk) return blocked(SCOPE_REASON)
   if (item.endAt <= now) return blocked('El evento ya ha terminado')
   if (item.beginAt <= now) return blocked('El evento ya ha empezado')

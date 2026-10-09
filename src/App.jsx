@@ -219,11 +219,11 @@ function App() {
 
   // ---- modos --------------------------------------------------------------
   // Correcciones, Exámenes, Eventos y Crear slots. Junto a cada botón, lo que
-  // la API no permite (motivo) o el último error de la intra en ese modo.
-  const [mode, setMode] = useState('corrections')
-  const [modeNotes, setModeNotes] = useState({
-    exams: { kind: 'reason', text: 'La API no deja inscribirse a exámenes: solo desde la intra' },
-  })
+  // la intra ha rechazado en ese modo (motivo o error). Las limitaciones fijas,
+  // como la inscripción a exámenes, van junto al botón de la acción en la ficha.
+  // Se arranca en Eventos: los próximos eventos son lo más útil de entrada.
+  const [mode, setMode] = useState('events')
+  const [modeNotes, setModeNotes] = useState({})
   const noteMode = useCallback((key, kind, text) => {
     setModeNotes((prev) => ({ ...prev, [key]: text ? { kind, text } : undefined }))
   }, [])

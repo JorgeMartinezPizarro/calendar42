@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { TYPE_COLORS } from '../agendaTypes.js'
+import { itemColor } from '../agendaTypes.js'
 import { useNow } from '../hooks/useNow.js'
 import { MIN_SLOT_MINUTES } from '../subscription.js'
 import { addDays, formatLongDate, formatTime, isSameDay, startOfDay } from '../utils/date.js'
@@ -244,7 +244,7 @@ function DayView({
                     .filter(Boolean)
                     .join(' ')}
                   style={{
-                    '--ev-color': TYPE_COLORS[item.type] ?? TYPE_COLORS.event,
+                    '--ev-color': itemColor(item),
                     top: `${top}%`,
                     height: `${height}%`,
                     left: `calc(${left}% + 2px)`,

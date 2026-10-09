@@ -70,6 +70,13 @@
   letter-spacing: 0.02em;
 }
 
+/* Evento externo: inscripción en su propia web. */
+.popover__badge--external {
+  background: transparent;
+  color: var(--pv-color);
+  border: 1px solid var(--pv-color);
+}
+
 .popover__title {
   margin: 0.3rem 0 0.6rem;
   padding-right: 2.75rem;
@@ -126,6 +133,13 @@
 .popover__button--unsubscribe {
   background: transparent;
   color: inherit;
+}
+
+/* Enlace con aspecto de botón (inscripción en la web del evento). */
+.popover__button--link {
+  display: inline-block;
+  text-decoration: none;
+  color: #1f2430;
 }
 
 .popover__button:hover:not(:disabled) {

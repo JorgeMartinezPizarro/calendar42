@@ -1,3 +1,5 @@
+import { withEventExtras } from '../externalEvents.js'
+
 /**
  * Pide al backend la agenda cuyo inicio cae en [from, to).
  * Devuelve { source, items, counts, warnings } con las fechas ya convertidas a Date.
@@ -25,10 +27,8 @@ export async function fetchAgenda(from, to, { signal } = {}) {
     source: data.source,
     counts: data.counts ?? {},
     warnings: data.warnings ?? [],
-    items: data.items.map((e) => ({
-      ...e,
-      beginAt: new Date(e.beginAt),
-      endAt: new Date(e.endAt),
-    })),
+    items: data.items.map((e) =>
+      withEventExtras({ ...e, beginAt: new Date(e.beginAt), endAt: new Date(e.endAt) }),
+    ),
   }
 }

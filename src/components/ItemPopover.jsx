@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { TYPE_COLORS } from '../agendaTypes.js'
+import { itemColor } from '../agendaTypes.js'
 import { MIN_SLOT_MINUTES } from '../subscription.js'
 import { formatRange, formatTime } from '../utils/date.js'
 import Markdown from './Markdown.jsx'
@@ -100,11 +100,11 @@ function ItemPopover({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const color = TYPE_COLORS[item.type] ?? TYPE_COLORS.event
+  const color = itemColor(item)
   const cap = capacity(item)
   const busy = Boolean(action?.busy)
   const slotBusy = Boolean(conflicts?.length)
-  const hasActions = Boolean(subscription || booking || slotDelete || conflicts)
+  const hasActions = Boolean(subscription || booking || slotDelete || conflicts || item.signupUrl)
 
   const feedback = (reason) => (
     <>
@@ -132,6 +132,9 @@ function ItemPopover({
 
       <div className="popover__head">
         <span className="popover__kind">{headline(item)}</span>
+        {item.signupUrl && (
+          <span className="popover__badge popover__badge--external">Inscripción externa</span>
+        )}
         {item.subscribed && <span className="popover__badge">Inscrito</span>}
       </div>
       <h3 className="popover__title">{item.name}</h3>
@@ -172,6 +175,18 @@ function ItemPopover({
             >
               {busy ? 'Un momento…' : subscription.action === 'subscribe' ? 'Apuntarme' : 'Borrarme'}
             </button>
+          )}
+
+          {item.signupUrl && (
+            <a
+              className="popover__button popover__button--link"
+              href={item.signupUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={item.signupUrl}
+            >
+              Inscribirse en su web ↗
+            </a>
           )}
 
           {booking && (

@@ -3,9 +3,9 @@ import './ModeBar.css'
 
 // Cada modo lleva el color de su categoría en la agenda.
 const MODES = [
+  { key: 'events', label: 'Eventos', color: TYPE_COLORS.event },
   { key: 'corrections', label: 'Correcciones', color: TYPE_COLORS.correction },
   { key: 'exams', label: 'Exámenes', color: TYPE_COLORS.exam },
-  { key: 'events', label: 'Eventos', color: TYPE_COLORS.event },
   { key: 'slots', label: 'Crear slots', color: TYPE_COLORS.slot },
 ]
 

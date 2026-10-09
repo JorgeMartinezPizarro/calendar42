@@ -163,7 +163,16 @@ const EVENTS = [
   { day: 12, start: 9, hours: 8, name: 'Hackathon 42 Madrid', kind: 'hackathon', location: 'Campus' },
   { day: 12, start: 11, hours: 1, name: 'Taller: Git avanzado', kind: 'workshop', location: 'Sala 2' },
   { day: 17, start: 12, hours: 1, name: 'Piscina: sesión informativa', kind: 'event', location: 'Auditorio' },
-  { day: 26, start: 19, hours: 3, name: 'Afterwork estudiantes', kind: 'extern', location: 'Cafetería' },
+  {
+    day: 26,
+    start: 19,
+    hours: 3,
+    name: 'Afterwork con empresas tech',
+    kind: 'extern',
+    location: 'Cafetería',
+    description:
+      'Evento **externo** organizado por empresas del sector.\n\nInscripción en [este formulario](https://forms.gle/calendar42-demo).',
+  },
 ]
 
 const EXAMS = [
@@ -216,6 +225,7 @@ export function mockAgenda({ from, to }) {
         kind: t.kind,
         name: t.name,
         description:
+          t.description ??
           'Evento de ejemplo con **Markdown**, como los de la intra.\n\n- Trae tu portátil\n- Plazas limitadas\n\nMás información en [la intra](https://intra.42.fr).\n\nConfigura FT_CLIENT_ID y FT_CLIENT_SECRET para ver los de verdad.',
         location: t.location,
         beginAt: begin.toISOString(),

@@ -1,4 +1,4 @@
-import { TYPE_COLORS } from '../agendaTypes.js'
+import { itemColor } from '../agendaTypes.js'
 import { formatRange } from '../utils/date.js'
 import './ItemList.css'
 
@@ -27,7 +27,7 @@ function ItemList({ title, items, status, emptyText, openItemId = null, onOpenIt
                 <button
                   type="button"
                   className={`itemlist__item itemlist__item--${item.type}${isOpen ? ' itemlist__item--open' : ''}`}
-                  style={{ '--il-color': TYPE_COLORS[item.type] }}
+                  style={{ '--il-color': itemColor(item) }}
                   aria-pressed={isOpen}
                   onClick={() => onOpenItem(item)}
                 >
@@ -39,6 +39,7 @@ function ItemList({ title, items, status, emptyText, openItemId = null, onOpenIt
                     <span className="itemlist__when">
                       {formatRange(item.beginAt, item.endAt)}
                       {item.subscribed ? ' · inscrito' : ''}
+                      {item.external ? ' · externo' : ''}
                     </span>
                   </span>
                 </button>
