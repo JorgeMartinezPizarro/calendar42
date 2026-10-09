@@ -51,7 +51,7 @@ El prototipo actual demuestra la idea central de Calendar42 mediante:
 - visualización de información temporal procedente de 42;
 - cuatro modos bajo el calendario: **Correcciones**, **Exámenes**, **Eventos** y **Crear slots**;
 - Correcciones: los proyectos del alumno aún sin terminar (solo los cerrados, pendientes de corrección, son seleccionables) y, para el elegido, los slots libres de otros estudiantes en el calendario y en las horas del día, desde donde se intenta reservar la corrección;
-- Exámenes: los exámenes disponibles de hoy a dentro de un mes; Eventos: los eventos de hoy a dentro de un mes, con los inscritos marcados;
+- Exámenes: los exámenes disponibles de hoy a dentro de un mes; Eventos: todos los eventos futuros del campus, con los inscritos marcados;
 - Crear slots: arrastrando sobre las horas del día se marca una franja y se crea el slot de corrección, en bloques de 15 minutos; un slot propio se puede borrar desde su ficha;
 - lo que la API no permite se indica junto al botón correspondiente con su motivo, y los errores de la intra se muestran en rojo en el mismo sitio;
 - ficha completa de cada elemento al pulsarlo, que ocupa el sitio de la vista del día (toda la pantalla en móvil) hasta cerrarla con su botón;
@@ -164,9 +164,9 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 - La API no deja a un estudiante inscribirse ni borrarse de un examen (`/v2/exams_users`), así que en los exámenes el botón sale desactivado con ese motivo.
 - Los slots propios se crean con `POST /v2/slots` y se borran bloque a bloque con `DELETE /v2/slots/:id` (scope `projects`). La intra valida la franja (futuro, bloques de 15 min); sus motivos se muestran junto al botón.
 - Para reservar una corrección se consultan los slots libres del proyecto (`/v2/projects/:id/slots`) y se intenta crear el `scale_team` con la escala principal del proyecto y el corrector dueño del slot. Si la intra reserva esa acción al personal, el motivo aparece junto al botón.
-- La API tiene un límite de 2 peticiones por segundo. Las llamadas pasan por un limitador.
+- La API tiene un límite de 2 peticiones por segundo y 1200 por hora, compartidos por todos los usuarios de la aplicación. Las llamadas pasan por un limitador y se cuentan: cerca del límite horario, la caché deja de renovar y sirve lo que tiene.
 - Para borrarse de un evento hace falta el id de la inscripción (`events_user`), no el del evento; se obtiene de `/v2/users/:id/events_users`. La intra valida aforo, fechas y plazo de cancelación: si rechaza la operación, la app muestra su motivo.
-- La agenda se cachea durante dos minutos por usuario y rango de fechas, y se invalida al apuntarse o borrarse de un evento.
+- La caché (`server/cache.js`) separa lo compartido de lo personal: los eventos y exámenes del campus se guardan por campus y rango durante 15 minutos, y los slots, correcciones e inscripciones por usuario durante 5 (los proyectos 10 y los slots libres de un proyecto 2). Pasado ese tiempo se sirve lo caducado al instante y se renueva en segundo plano, así nadie espera a la intra salvo la primera vez. Lo personal se invalida con cada acción del usuario (apuntarse, crear o borrar un slot, reservar). `GET /api/health` muestra las llamadas de la última hora y el estado de la caché.
 - El token de autenticación permanece en el backend y no se expone al navegador.
 
 ## Puesta en marcha
@@ -203,7 +203,7 @@ La aplicación estará disponible en:
 - Web: `http://localhost:5173`
 - API: `http://localhost:3000`
 
-Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejemplo**.
+El **modo demo con datos de ejemplo** está siempre disponible en la pantalla de login, también con credenciales: así se puede enseñar la aplicación aunque la intra esté caída o rechace las peticiones.
 
 ## Docker
 
@@ -216,7 +216,7 @@ make logs      # sigue los logs
 make stop      # para y elimina el contenedor
 ```
 
-También `make restart`, `make status`, `make shell` y `make clean` (borra además la imagen y el volumen de sesiones). Sin `make`, los mismos comandos son `docker compose build`, `docker compose up -d --build`, `docker compose logs -f` y `docker compose down`.
+También `make restart`, `make status`, `make shell`, `make clean` (borra además la imagen y el volumen de sesiones) y `make doctor`, que muestra el puerto y la URL que se van a aplicar y quién ocupa ese puerto en el host: es lo primero que mirar si `make start` falla con "port is already allocated". Sin `make`, los mismos comandos son `docker compose build`, `docker compose up -d --build`, `docker compose logs -f` y `docker compose down`.
 
 El contenedor lee las credenciales del mismo `.env`. Como todo va por el puerto 3000, el login de la intra vuelve a `http://localhost:3000/api/auth/callback`: registra también esa redirect URI en la app OAuth. Para publicarlo con otra URL, define `PUBLIC_URL` (y `PUBLIC_PORT` para el puerto del host) en `.env`. Las sesiones se guardan en el volumen `calendar42-data` y sobreviven a reinicios.
 
@@ -229,6 +229,7 @@ El contenedor lee las credenciales del mismo `.env`. Como todo va por el puerto 
 | `GET /api/auth/me` | Usuario de la sesión |
 | `POST /api/auth/logout` | Cierra la sesión |
 | `GET /api/agenda?from&to` | Construye la agenda entre dos fechas ISO |
+| `GET /api/events/upcoming` | Todos los eventos del campus desde hoy, con las inscripciones del usuario |
 | `GET /api/projects` | Proyectos del usuario en su cursus, con su estado |
 | `GET /api/projects/:id/slots?from&to` | Slots libres de otros estudiantes para corregir el proyecto |
 | `POST /api/corrections` | Reserva una corrección del proyecto en un instante |

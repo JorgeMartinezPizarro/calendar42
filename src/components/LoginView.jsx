@@ -59,6 +59,7 @@ function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }) {
             className="login__button login__button--secondary"
             onClick={handleDemo}
             disabled={busy}
+            title="Datos de ejemplo, sin tocar la intra"
           >
             {busy ? 'Entrando…' : 'Entrar en modo demo'}
           </button>

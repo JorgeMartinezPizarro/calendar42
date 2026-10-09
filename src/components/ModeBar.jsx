@@ -1,10 +1,12 @@
+import { TYPE_COLORS } from '../agendaTypes.js'
 import './ModeBar.css'
 
+// Cada modo lleva el color de su categoría en la agenda.
 const MODES = [
-  { key: 'corrections', label: 'Correcciones' },
-  { key: 'exams', label: 'Exámenes' },
-  { key: 'events', label: 'Eventos' },
-  { key: 'slots', label: 'Crear slots' },
+  { key: 'corrections', label: 'Correcciones', color: TYPE_COLORS.correction },
+  { key: 'exams', label: 'Exámenes', color: TYPE_COLORS.exam },
+  { key: 'events', label: 'Eventos', color: TYPE_COLORS.event },
+  { key: 'slots', label: 'Crear slots', color: TYPE_COLORS.slot },
 ]
 
 /**
@@ -19,7 +21,7 @@ function ModeBar({ mode, onChange, notes = {} }) {
         const active = mode === m.key
         const note = notes[m.key]
         return (
-          <div key={m.key} className="modebar__item">
+          <div key={m.key} className="modebar__item" style={{ '--mb-color': m.color }}>
             <button
               type="button"
               className={`modebar__button${active ? ' modebar__button--active' : ''}`}

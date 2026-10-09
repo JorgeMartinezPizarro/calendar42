@@ -17,8 +17,8 @@ services:
       # URL pública con la que se abre la app: a ella vuelve el login de la
       # intra, así que <PUBLIC_URL>/api/auth/callback debe estar registrada
       # como redirect URI en la app OAuth. Se puede fijar en .env.
-      APP_URL: ${PUBLIC_URL:-http://localhost:3000}
-      FT_REDIRECT_URI: ${PUBLIC_URL:-http://localhost:3000}/api/auth/callback
+      APP_URL: ${PUBLIC_URL:-http://localhost:${PUBLIC_PORT:-3000}}
+      FT_REDIRECT_URI: ${PUBLIC_URL:-http://localhost:${PUBLIC_PORT:-3000}}/api/auth/callback
     ports:
       - "${PUBLIC_PORT:-3000}:3000"
     volumes:

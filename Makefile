@@ -4,22 +4,29 @@
 #   make stop     para y elimina el contenedor (las sesiones quedan en el volumen)
 #   make logs     sigue los logs
 #   make build    solo construye la imagen
+#   make doctor   puerto y URL efectivos, y quién ocupa el puerto del host
 #
-# Variables opcionales (también en .env): PUBLIC_URL, PUBLIC_PORT.
+# Variables opcionales, en .env o en el entorno: PUBLIC_PORT, PUBLIC_URL.
 
 COMPOSE ?= docker compose
 
-.PHONY: help build start stop restart logs status shell clean
+# Lee .env (si existe) para conocer PUBLIC_PORT y PUBLIC_URL, igual que compose.
+-include .env
+PUBLIC_PORT ?= 3000
+PUBLIC_URL ?= http://localhost:$(PUBLIC_PORT)
+export PUBLIC_PORT PUBLIC_URL
+
+.PHONY: help build start stop restart logs status shell clean doctor
 
 help: ## Lista los comandos disponibles
-	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN { FS = ":.*## " } { printf "  make %-8s %s\n", $$1, $$2 }'
+	@grep -hE '^[a-z]+:.*## ' $(firstword $(MAKEFILE_LIST)) | awk 'BEGIN { FS = ":.*## " } { printf "  make %-8s %s\n", $$1, $$2 }'
 
 build: ## Construye la imagen
 	$(COMPOSE) build
 
-start: ## Levanta el servicio (construye si hay cambios) en http://localhost:3000
+start: ## Levanta el servicio (construye si hay cambios)
 	$(COMPOSE) up -d --build
-	@echo "Calendar42 en http://localhost:$${PUBLIC_PORT:-3000}"
+	@echo "Calendar42 en $(PUBLIC_URL) (puerto $(PUBLIC_PORT) del host -> 3000 del contenedor)"
 
 stop: ## Para y elimina el contenedor
 	$(COMPOSE) down
@@ -37,3 +44,12 @@ shell: ## Abre una shell dentro del contenedor
 
 clean: ## Para y borra también la imagen y el volumen de sesiones
 	$(COMPOSE) down -v --rmi local
+
+doctor: ## Puerto y URL efectivos, y quién ocupa el puerto del host
+	@echo "Puerto del host: $(PUBLIC_PORT)   URL pública: $(PUBLIC_URL)"
+	@echo "Lo que compose va a aplicar:"
+	@$(COMPOSE) config 2>/dev/null | grep -E 'published:|target:|APP_URL:|FT_REDIRECT_URI:|PORT:' | sed 's/^ */  /'
+	@echo "Contenedores que publican el puerto $(PUBLIC_PORT):"
+	@docker ps --format '  {{.Names}}  {{.Ports}}' | grep -E '[:.]$(PUBLIC_PORT)->' || echo "  ninguno"
+	@echo "Procesos del host escuchando en el puerto $(PUBLIC_PORT):"
+	@(ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ':$(PUBLIC_PORT)( |$$)' || echo "  ninguno"

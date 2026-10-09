@@ -4,19 +4,27 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createCache } from './cache.js'
 import {
+  INTRA_HOURLY_LIMIT,
   OAUTH_SCOPES,
   authorizeUrl,
   bookCorrection,
   createSlot,
   deleteSlots,
   exchangeCode,
-  fetchAgenda,
+  fetchCampusAgenda,
+  fetchCampusEvents,
   fetchMe,
+  fetchMyEventIds,
   fetchMyProjects,
+  fetchPersonalAgenda,
   fetchProjectSlots,
   hasAppCredentials,
+  intraBudgetLow,
+  intraCallsLastHour,
   isNotAuthorized,
+  mergeAgenda,
   refreshTokens,
   subscribeToEvent,
   unsubscribeFromEvent,
@@ -52,11 +60,21 @@ const APP_URL = process.env.APP_URL || 'http://localhost:5173'
 app.use(express.json())
 app.use(sessionMiddleware)
 
-// Cache de agenda en memoria por usuario+rango. Los slots y correcciones son
-// personales, así que la clave incluye el usuario.
-const CACHE_TTL_MS = 2 * 60 * 1000
-const agendaCache = new Map() // key -> { expiresAt, payload }
-const agendaInFlight = new Map() // key -> Promise<payload>, evita cargas duplicadas simultáneas
+// Caché en memoria (ver cache.js). Lo del campus es igual para todos los
+// alumnos y cambia poco; lo personal se invalida además con cada acción del
+// usuario. Pasado el tiempo en fresco se sirve caducado y se renueva detrás.
+const TTL_MS = {
+  campus: 15 * 60_000,
+  personal: 5 * 60_000,
+  projects: 10 * 60_000,
+  freeSlots: 2 * 60_000,
+}
+const cache = createCache({ isLowBudget: intraBudgetLow })
+
+// Un resultado con fallos pasajeros (intra caída, 429…) no se guarda: así la
+// siguiente petición vuelve a intentarlo enseguida.
+const withoutTransientFailures = (value) =>
+  !value.warnings?.some((w) => w.code === 'transient_error')
 
 function parseDate(value, fallback) {
   if (!value) return fallback
@@ -112,8 +130,11 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     authConfigured: hasAppCredentials(),
-    demoAvailable: !hasAppCredentials(),
+    demoAvailable: true,
     scopes: OAUTH_SCOPES,
+    // Llamadas a la intra en la última hora frente al límite, y estado de la caché.
+    intra: { callsLastHour: intraCallsLastHour(), hourlyLimit: INTRA_HOURLY_LIMIT, budgetLow: intraBudgetLow() },
+    cache: cache.stats(),
   })
 })
 
@@ -126,7 +147,7 @@ app.get('/api/auth/me', (req, res) => {
     return res.status(401).json({
       error: 'No has iniciado sesión',
       authConfigured: hasAppCredentials(),
-      demoAvailable: !hasAppCredentials(),
+      demoAvailable: true,
     })
   }
   res.json({
@@ -172,11 +193,9 @@ app.get('/api/auth/callback', async (req, res) => {
   }
 })
 
-// Modo demo: solo disponible si la app de 42 no está configurada.
+// Modo demo: siempre disponible, también con credenciales, para poder enseñar
+// la aplicación aunque la intra esté caída o rechace las peticiones.
 app.post('/api/auth/demo', (req, res) => {
-  if (hasAppCredentials()) {
-    return res.status(403).json({ error: 'El modo demo está desactivado cuando hay credenciales' })
-  }
   destroySession(req.sessionId)
   const user = {
     id: 0,
@@ -204,8 +223,9 @@ app.post('/api/auth/logout', (req, res) => {
 /**
  * GET /api/agenda?from=ISO&to=ISO
  * Todo lo que cae en [from, to) para el usuario: eventos y exámenes de su
- * campus, sus slots de corrección abiertos y sus correcciones planificadas.
- * Respuesta: { source, campusId, items, counts, warnings }
+ * campus (caché compartida por campus), sus slots de corrección abiertos, sus
+ * correcciones planificadas y sus inscripciones (caché por usuario).
+ * Respuesta: { source, campusId, cache, items, counts, warnings }
  */
 app.get('/api/agenda', requireSession, async (req, res) => {
   const now = new Date()
@@ -221,32 +241,31 @@ app.get('/api/agenda', requireSession, async (req, res) => {
 
   const session = req.session
   const campusId = session.user.campusId ?? DEFAULT_CAMPUS_ID
-  const source = session.demo ? 'mock' : 'intra'
-  const key = `${source}:${session.user.id}:${campusId}:${from.toISOString()}:${to.toISOString()}`
-  const hit = agendaCache.get(key)
-  if (hit && hit.expiresAt > Date.now()) {
-    return res.json({ source, campusId, ...hit.payload })
+  if (session.demo) {
+    return res.json({ source: 'mock', campusId, ...mockAgenda({ from, to }) })
   }
 
+  const range = `${from.toISOString()}:${to.toISOString()}`
   try {
-    let pending = agendaInFlight.get(key)
-    if (!pending) {
-      pending = (async () => {
-        if (session.demo) return mockAgenda({ from, to })
-        const token = await validAccessToken(session)
-        return fetchAgenda(token, { campusId, userId: session.user.id, from, to })
-      })()
-      agendaInFlight.set(key, pending)
-      pending.finally(() => agendaInFlight.delete(key))
-    }
-    const payload = await pending
-    // Si alguna fuente falló por un problema pasajero (intra caída, 429…), no
-    // cacheamos: así una recarga vuelve a intentarlo enseguida.
-    const hasTransientFailure = payload.warnings?.some((w) => w.code === 'transient_error')
-    if (!hasTransientFailure) {
-      agendaCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, payload })
-    }
-    res.json({ source, campusId, ...payload })
+    const token = await validAccessToken(session)
+    const [campus, personal] = await Promise.all([
+      cache.cached(
+        `campus:${campusId}:${range}`,
+        { ttlMs: TTL_MS.campus, store: withoutTransientFailures },
+        () => fetchCampusAgenda(token, { campusId, from, to }),
+      ),
+      cache.cached(
+        `personal:${session.user.id}:${range}`,
+        { ttlMs: TTL_MS.personal, store: withoutTransientFailures },
+        () => fetchPersonalAgenda(token, { userId: session.user.id, from, to }),
+      ),
+    ])
+    res.json({
+      source: 'intra',
+      campusId,
+      cache: { campus: campus.state, personal: personal.state },
+      ...mergeAgenda(campus.value, personal.value),
+    })
   } catch (err) {
     console.error('[agenda]', err.message)
     if (err.status === 401) return sessionExpired(req, res)
@@ -266,25 +285,14 @@ app.get('/api/agenda', requireSession, async (req, res) => {
  */
 app.get('/api/projects', requireSession, async (req, res) => {
   const session = req.session
-  const source = session.demo ? 'mock' : 'intra'
-  const key = `projects:${source}:${session.user.id}`
-  const hit = agendaCache.get(key)
-  if (hit && hit.expiresAt > Date.now()) return res.json(hit.payload)
+  if (session.demo) return res.json({ projects: mockProjects() })
 
   try {
-    let projects
-    if (session.demo) {
-      projects = mockProjects()
-    } else {
-      const token = await validAccessToken(session)
-      projects = await fetchMyProjects(token, {
-        userId: session.user.id,
-        cursusId: session.user.cursusId ?? null,
-      })
-    }
-    const payload = { projects }
-    agendaCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, payload })
-    res.json(payload)
+    const token = await validAccessToken(session)
+    const { value } = await cache.cached(`projects:${session.user.id}`, { ttlMs: TTL_MS.projects }, () =>
+      fetchMyProjects(token, { userId: session.user.id, cursusId: session.user.cursusId ?? null }),
+    )
+    res.json({ projects: value })
   } catch (err) {
     console.error('[projects]', err.message)
     if (err.status === 401) return sessionExpired(req, res)
@@ -301,14 +309,12 @@ app.get('/api/projects', requireSession, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 /**
- * Olvida la agenda cacheada de un usuario y los slots libres que consultó
- * (tras apuntarse a algo, crear o borrar un slot, o reservar una corrección).
+ * Olvida lo personal cacheado de un usuario: su parte de la agenda y los slots
+ * libres que consultó (tras apuntarse a algo, crear o borrar un slot, o
+ * reservar una corrección). Lo del campus no cambia con esas acciones.
  */
-function forgetAgendaOf(source, userId) {
-  const prefixes = [`${source}:${userId}:`, `pslots:${source}:${userId}:`]
-  for (const key of agendaCache.keys()) {
-    if (prefixes.some((p) => key.startsWith(p))) agendaCache.delete(key)
-  }
+function forgetPersonal(userId) {
+  cache.forget((key) => key.startsWith(`personal:${userId}:`) || key.startsWith(`pslots:${userId}:`))
 }
 
 /**
@@ -324,7 +330,6 @@ async function setSubscription(req, res, subscribed) {
     return res.status(400).json({ error: 'Id de evento inválido' })
   }
   const session = req.session
-  const source = session.demo ? 'mock' : 'intra'
 
   try {
     let event = null
@@ -335,7 +340,7 @@ async function setSubscription(req, res, subscribed) {
       const args = { eventId, userId: session.user.id }
       event = subscribed ? await subscribeToEvent(token, args) : await unsubscribeFromEvent(token, args)
     }
-    forgetAgendaOf(source, session.user.id)
+    forgetPersonal(session.user.id)
     res.json({ ok: true, subscribed, subscribers: event?.subscribers ?? null })
   } catch (err) {
     sendIntraFailure(req, res, err, `events ${subscribed ? 'alta' : 'baja'} ${eventId}`, {
@@ -361,7 +366,6 @@ app.post('/api/slots', requireSession, async (req, res) => {
     return res.status(400).json({ error: 'Franja inválida: hacen falta beginAt y endAt (ISO), con fin posterior al inicio' })
   }
   const session = req.session
-  const source = session.demo ? 'mock' : 'intra'
   try {
     let items
     if (session.demo) {
@@ -374,7 +378,7 @@ app.post('/api/slots', requireSession, async (req, res) => {
         endAt: end.toISOString(),
       })
     }
-    forgetAgendaOf(source, session.user.id)
+    forgetPersonal(session.user.id)
     res.json({ ok: true, items })
   } catch (err) {
     sendIntraFailure(req, res, err, 'slots alta')
@@ -388,14 +392,13 @@ app.delete('/api/slots', requireSession, async (req, res) => {
     return res.status(400).json({ error: 'Hacen falta los ids de los bloques del slot' })
   }
   const session = req.session
-  const source = session.demo ? 'mock' : 'intra'
   try {
     if (session.demo) {
       mockDeleteSlots(ids)
     } else {
       await deleteSlots(await validAccessToken(session), ids)
     }
-    forgetAgendaOf(source, session.user.id)
+    forgetPersonal(session.user.id)
     res.json({ ok: true })
   } catch (err) {
     sendIntraFailure(req, res, err, 'slots baja')
@@ -418,21 +421,15 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
     return res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
   }
   const session = req.session
-  const source = session.demo ? 'mock' : 'intra'
-  const key = `pslots:${source}:${session.user.id}:${projectId}:${from.toISOString()}:${to.toISOString()}`
-  const hit = agendaCache.get(key)
-  if (hit && hit.expiresAt > Date.now()) return res.json(hit.payload)
+  if (session.demo) return res.json({ items: mockProjectSlots({ projectId, from, to }) })
 
   try {
-    let items
-    if (session.demo) {
-      items = mockProjectSlots({ projectId, from, to })
-    } else {
-      items = await fetchProjectSlots(await validAccessToken(session), { projectId, from, to })
-    }
-    const payload = { items }
-    agendaCache.set(key, { expiresAt: Date.now() + 60_000, payload })
-    res.json(payload)
+    const token = await validAccessToken(session)
+    const key = `pslots:${session.user.id}:${projectId}:${from.toISOString()}:${to.toISOString()}`
+    const { value } = await cache.cached(key, { ttlMs: TTL_MS.freeSlots }, () =>
+      fetchProjectSlots(token, { projectId, from, to }),
+    )
+    res.json({ items: value })
   } catch (err) {
     sendIntraFailure(req, res, err, `slots libres ${projectId}`, {
       hint: 'Puede que la API no deje a los estudiantes consultar los slots de un proyecto.',
@@ -453,7 +450,6 @@ app.post('/api/corrections', requireSession, async (req, res) => {
     return res.status(400).json({ error: 'Hacen falta projectId, teamId y beginAt (ISO)' })
   }
   const session = req.session
-  const source = session.demo ? 'mock' : 'intra'
   try {
     let item = null
     if (session.demo) {
@@ -466,7 +462,7 @@ app.post('/api/corrections', requireSession, async (req, res) => {
         correctorId,
       })
     }
-    forgetAgendaOf(source, session.user.id)
+    forgetPersonal(session.user.id)
     res.json({ ok: true, item })
   } catch (err) {
     sendIntraFailure(req, res, err, `corrección ${projectId}`, {
@@ -477,6 +473,49 @@ app.post('/api/corrections', requireSession, async (req, res) => {
 
 app.post('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, true))
 app.delete('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, false))
+
+/**
+ * GET /api/events/upcoming
+ * Todos los eventos del campus desde hoy hasta dentro de un año, con las
+ * inscripciones del usuario: la intra publica pocos y así la lista no depende
+ * del mes. Eventos en caché compartida por campus; inscripciones por usuario.
+ * Respuesta: { cache, items }
+ */
+app.get('/api/events/upcoming', requireSession, async (req, res) => {
+  const session = req.session
+  const campusId = session.user.campusId ?? DEFAULT_CAMPUS_ID
+  // Desde el inicio del día (clave de caché estable durante el día) a un año.
+  const from = new Date()
+  from.setUTCHours(0, 0, 0, 0)
+  const to = new Date(from.getTime() + 365 * 86_400_000)
+
+  if (session.demo) {
+    const { items } = mockAgenda({ from, to })
+    return res.json({ items: items.filter((it) => it.type === 'event') })
+  }
+
+  const range = `${from.toISOString()}:${to.toISOString()}`
+  try {
+    const token = await validAccessToken(session)
+    const [events, mine] = await Promise.all([
+      cache.cached(`campus-events:${campusId}:${range}`, { ttlMs: TTL_MS.campus }, () =>
+        fetchCampusEvents(token, { campusId, from, to }),
+      ),
+      cache.cached(`personal:${session.user.id}:events:${range}`, { ttlMs: TTL_MS.personal }, () =>
+        fetchMyEventIds(token, { userId: session.user.id, from, to }).then((ids) => [...ids]),
+      ),
+    ])
+    const myIds = new Set(mine.value)
+    res.json({
+      cache: { events: events.state, mine: mine.state },
+      items: events.value.map((it) => ({ ...it, subscribed: myIds.has(it.eventId) })),
+    })
+  } catch (err) {
+    console.error('[events/upcoming]', err.message)
+    if (err.status === 401) return sessionExpired(req, res)
+    res.status(502).json({ error: err.message })
+  }
+})
 
 // Compatibilidad con el nombre anterior.
 app.get('/api/events', (req, res) => res.redirect(307, `/api/agenda${req.url.slice(req.path.length)}`))
@@ -495,7 +534,7 @@ if (servesFrontend) {
 }
 
 app.listen(PORT, () => {
-  const mode = hasAppCredentials() ? 'OAuth con la intra' : 'sin credenciales, modo demo disponible'
+  const mode = hasAppCredentials() ? 'OAuth con la intra y modo demo' : 'sin credenciales, solo modo demo'
   const what = servesFrontend ? 'Calendar42 (API y frontend)' : 'API'
   console.log(`${what} escuchando en http://localhost:${PORT} (${mode})`)
 })

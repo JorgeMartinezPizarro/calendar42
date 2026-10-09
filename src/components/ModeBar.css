@@ -1,43 +1,52 @@
 .modebar {
-  --mb-border: rgba(128, 128, 128, 0.35);
-
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
 }
 
 .modebar__item {
+  --mb-color: #4f8cff; /* lo fija cada modo en línea */
+
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
 }
 
+/* Cada botón lleva el color de su sección como acento a la izquierda; el
+   activo se rellena con ese color para que la sección quede clara. */
 .modebar__button {
   font: inherit;
   font-size: 0.9rem;
   font-weight: 600;
   color: inherit;
   padding: 0.55rem 0.75rem;
-  border: 1px solid var(--mb-border);
+  border: 1px solid color-mix(in srgb, var(--mb-color) 45%, transparent);
+  border-left: 4px solid var(--mb-color);
   border-radius: 10px;
-  background: transparent;
+  background: color-mix(in srgb, var(--mb-color) 8%, transparent);
   cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .modebar__button:hover {
-  border-color: var(--coalition, #4f8cff);
+  background: color-mix(in srgb, var(--mb-color) 20%, transparent);
+  border-color: var(--mb-color);
 }
 
 .modebar__button:focus-visible {
-  outline: 2px solid var(--coalition, #4f8cff);
+  outline: 2px solid var(--mb-color);
   outline-offset: 2px;
 }
 
-.modebar__button--active {
-  background: var(--coalition, #4f8cff);
-  border-color: var(--coalition, #4f8cff);
+.modebar__button--active,
+.modebar__button--active:hover {
+  background: var(--mb-color);
+  border-color: var(--mb-color);
   color: #fff;
+  box-shadow: 0 8px 18px -10px var(--mb-color);
 }
 
 /* Motivo (lo que la API no permite) o error (rojo) junto al botón. */

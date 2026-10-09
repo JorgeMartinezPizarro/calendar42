@@ -30,6 +30,7 @@ export function authorizeUrl(state) {
 }
 
 async function tokenRequest(params) {
+  recordCall()
   const res = await fetch(`${INTRA_BASE}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -84,11 +85,40 @@ let queue = Promise.resolve()
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Presupuesto horario: la intra admite 1200 llamadas por hora por aplicación,
+// compartidas por todos los usuarios. Se anotan todas las peticiones (también
+// reintentos y tokens) y, cuando queda poco margen, la caché deja de renovar
+// y sirve lo que tiene (ver cache.js).
+export const INTRA_HOURLY_LIMIT = Number(process.env.FT_HOURLY_LIMIT) || 1200
+const HOURLY_RESERVE = 120 // margen para lo imprescindible: logins y acciones
+const callLog = [] // instantes de las llamadas de la última hora
+
+function pruneCalls(now) {
+  const limit = now - 3_600_000
+  while (callLog.length && callLog[0] < limit) callLog.shift()
+}
+
+function recordCall() {
+  const now = Date.now()
+  callLog.push(now)
+  pruneCalls(now)
+}
+
+export function intraCallsLastHour() {
+  pruneCalls(Date.now())
+  return callLog.length
+}
+
+export function intraBudgetLow() {
+  return intraCallsLastHour() >= INTRA_HOURLY_LIMIT - HOURLY_RESERVE
+}
+
 function throttled(fn) {
   const run = queue.then(async () => {
     const wait = lastStart + MIN_GAP_MS - Date.now()
     if (wait > 0) await sleep(wait)
     lastStart = Date.now()
+    recordCall()
     return fn()
   })
   // La cola nunca se rompe aunque una petición falle.
@@ -737,70 +767,104 @@ export async function fetchMyCorrections(accessToken, { userId, from, to }) {
 }
 
 /**
- * Agenda completa: eventos + exámenes del campus, slots abiertos y
- * correcciones del usuario. Si una fuente falla (p. ej. falta el scope),
- * devolvemos el resto y un aviso en `warnings`.
+ * Recoge varias fuentes a la vez. Si una falla (p. ej. falta el scope),
+ * devuelve el resto y un aviso en `warnings`; una sesión caducada (401) se
+ * propaga para que la gestione el llamador.
  */
-export async function fetchAgenda(accessToken, { campusId, userId, from, to }) {
-  const sources = [
-    ['event', () => fetchCampusEvents(accessToken, { campusId, from, to })],
-    ['exam', () => fetchCampusExams({ campusId, from, to })],
-    ['slot', () => fetchMyOpenSlots(accessToken, { from, to })],
-    ['correction', () => fetchMyCorrections(accessToken, { userId, from, to })],
-    ['myEvents', () => fetchMyEventIds(accessToken, { userId, from, to })],
-    ['myExams', () => fetchMyExamIds({ userId, from, to })],
-  ]
-  const MEMBERSHIP_SOURCES = new Set(['myEvents', 'myExams'])
-
+async function collectSources(sources) {
   const results = await Promise.allSettled(sources.map(([, fn]) => fn()))
-
-  const items = []
-  const counts = {}
+  const values = {}
   const warnings = []
-  let myEventIds = new Set()
-  let myExamIds = new Set()
 
   results.forEach((result, i) => {
     const type = sources[i][0]
     if (result.status === 'fulfilled') {
-      if (type === 'myEvents') {
-        myEventIds = result.value
-        return
-      }
-      if (type === 'myExams') {
-        myExamIds = result.value
-        return
-      }
-      counts[type] = result.value.length
-      items.push(...result.value)
+      values[type] = result.value
+      return
+    }
+    const err = result.reason
+    if (err.status === 401) throw err
+    if (err.status === 403 && (type === 'slot' || type === 'correction')) {
+      warnings.push({
+        type,
+        code: 'missing_scope',
+        message: 'La sesión no tiene el scope "projects". Cierra sesión y vuelve a entrar.',
+      })
     } else {
-      const err = result.reason
-      if (err.status === 401) throw err // sesión caducada: lo gestiona el llamador
-      if (!MEMBERSHIP_SOURCES.has(type)) counts[type] = 0
-      if (err.status === 403 && (type === 'slot' || type === 'correction')) {
-        warnings.push({
-          type,
-          code: 'missing_scope',
-          message: 'La sesión no tiene el scope "projects". Cierra sesión y vuelve a entrar.',
-        })
-      } else {
-        warnings.push({
-          type,
-          code: err.transient ? 'transient_error' : 'source_error',
-          message: err.message,
-        })
-      }
+      warnings.push({
+        type,
+        code: err.transient ? 'transient_error' : 'source_error',
+        message: err.message,
+      })
     }
   })
 
-  // Marcamos las inscripciones del usuario.
-  for (const it of items) {
-    if (it.type === 'event') it.subscribed = myEventIds.has(Number(it.id.replace('event-', '')))
-    else if (it.type === 'exam') it.subscribed = myExamIds.has(Number(it.id.replace('exam-', '')))
-  }
-  counts.myEvents = items.filter((it) => it.type === 'event' && it.subscribed).length
-  counts.myExams = items.filter((it) => it.type === 'exam' && it.subscribed).length
+  return { values, warnings }
+}
 
-  items.sort((a, b) => a.beginAt.localeCompare(b.beginAt))
-  return { items, counts, warnings }
+/**
+ * Parte compartida de la agenda: eventos y exámenes del campus en [from, to).
+ * Es igual para todos los alumnos del campus, así que se cachea por campus.
+ */
+export async function fetchCampusAgenda(accessToken, { campusId, from, to }) {
+  const { values, warnings } = await collectSources([
+    ['event', () => fetchCampusEvents(accessToken, { campusId, from, to })],
+    ['exam', () => fetchCampusExams({ campusId, from, to })],
+  ])
+  return { events: values.event ?? [], exams: values.exam ?? [], warnings }
+}
+
+/**
+ * Parte personal de la agenda en [from, to): slots abiertos, correcciones e
+ * inscripciones (ids de eventos y exámenes) del usuario. Se cachea por usuario
+ * y se invalida con cada acción suya.
+ */
+export async function fetchPersonalAgenda(accessToken, { userId, from, to }) {
+  const { values, warnings } = await collectSources([
+    ['slot', () => fetchMyOpenSlots(accessToken, { from, to })],
+    ['correction', () => fetchMyCorrections(accessToken, { userId, from, to })],
+    ['myEvents', () => fetchMyEventIds(accessToken, { userId, from, to })],
+    ['myExams', () => fetchMyExamIds({ userId, from, to })],
+  ])
+  return {
+    slots: values.slot ?? [],
+    corrections: values.correction ?? [],
+    myEventIds: [...(values.myEvents ?? [])],
+    myExamIds: [...(values.myExams ?? [])],
+    warnings,
+  }
+}
+
+/**
+ * Une la parte del campus y la personal en la agenda que ve el frontend:
+ * { items, counts, warnings }. Lo del campus vive en una caché compartida, así
+ * que se copia antes de marcar las inscripciones del usuario.
+ */
+export function mergeAgenda(campus, personal) {
+  const myEventIds = new Set(personal.myEventIds)
+  const myExamIds = new Set(personal.myExamIds)
+  const events = campus.events.map((it) => ({ ...it, subscribed: myEventIds.has(it.eventId) }))
+  const exams = campus.exams.map((it) => ({ ...it, subscribed: myExamIds.has(it.examId) }))
+
+  const items = [...events, ...exams, ...personal.slots, ...personal.corrections].sort((a, b) =>
+    a.beginAt.localeCompare(b.beginAt),
+  )
+  const counts = {
+    event: events.length,
+    exam: exams.length,
+    slot: personal.slots.length,
+    correction: personal.corrections.length,
+    myEvents: events.filter((it) => it.subscribed).length,
+    myExams: exams.filter((it) => it.subscribed).length,
+  }
+  return { items, counts, warnings: [...campus.warnings, ...personal.warnings] }
+}
+
+/** Agenda completa de una vez, sin caché. */
+export async function fetchAgenda(accessToken, { campusId, userId, from, to }) {
+  const [campus, personal] = await Promise.all([
+    fetchCampusAgenda(accessToken, { campusId, from, to }),
+    fetchPersonalAgenda(accessToken, { userId, from, to }),
+  ])
+  return mergeAgenda(campus, personal)
 }

@@ -10,7 +10,7 @@ import SlotCreator from './components/SlotCreator.jsx'
 import { AGENDA_TYPES, isMine } from './agendaTypes.js'
 import { fetchMe, logout } from './api/auth.js'
 import { fetchAgenda } from './api/agenda.js'
-import { setEventSubscription } from './api/events.js'
+import { fetchUpcomingEvents, setEventSubscription } from './api/events.js'
 import { fetchProjects } from './api/projects.js'
 import { bookCorrection, createSlot, deleteSlots, fetchProjectSlots } from './api/slots.js'
 import { useNow } from './hooks/useNow.js'
@@ -25,6 +25,7 @@ import './App.css'
 
 const EMPTY = []
 const NO_PROJECTS = { status: 'idle', items: EMPTY, error: null }
+const NO_UPCOMING = { status: 'idle', items: EMPTY, error: null }
 const LOADING = { status: 'loading', items: EMPTY, error: null }
 const IDLE_ACTION = { busy: false, error: null, created: null }
 
@@ -82,6 +83,7 @@ function App() {
     await logout()
     setAgendaByMonth({})
     setProjects(NO_PROJECTS)
+    setUpcoming(NO_UPCOMING)
     setFreeSlotsByKey({})
     await backToLogin()
   }
@@ -160,15 +162,33 @@ function App() {
   // Lo del usuario: va siempre al calendario y a la vista del día.
   const visibleItems = useMemo(() => allItems.filter(isMine), [allItems])
 
-  // Listas de los modos "Exámenes" (disponibles) y "Eventos" (todos, inscrito
-  // o no): lo que aún no ha terminado y empieza de hoy a dentro de un mes.
-  const upcomingEvents = useMemo(() => {
-    const limit = addMonths(now, 1)
-    limit.setDate(now.getDate())
-    return allItems
-      .filter((it) => it.type === 'event' && it.endAt > now && it.beginAt < limit)
-      .sort(byBegin)
-  }, [allItems, now])
+  // Modo "Eventos": todos los eventos futuros del campus (la intra publica
+  // pocos, así que caben todos), inscrito o no, con su propia carga.
+  const [upcoming, setUpcoming] = useState(NO_UPCOMING)
+
+  useEffect(() => {
+    if (!loggedIn) return
+    const controller = new AbortController()
+    setUpcoming((prev) => ({ ...prev, status: 'loading', error: null }))
+    fetchUpcomingEvents({ signal: controller.signal })
+      .then((items) => setUpcoming({ status: 'idle', items, error: null }))
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        if (err.status === 401) {
+          backToLogin()
+          return
+        }
+        setUpcoming({ status: 'error', items: EMPTY, error: err.message })
+      })
+    return () => controller.abort()
+  }, [loggedIn])
+
+  const upcomingEvents = useMemo(
+    () => upcoming.items.filter((it) => it.endAt > now).sort(byBegin),
+    [upcoming.items, now],
+  )
+
+  // Modo "Exámenes": los disponibles que empiezan de hoy a dentro de un mes.
   const availableExams = useMemo(() => {
     const limit = addMonths(now, 1)
     limit.setDate(now.getDate())
@@ -303,11 +323,15 @@ function App() {
     setOpenId(null)
   }, [])
 
-  // Siempre la versión más reciente del elemento (cambia al apuntarse o borrarse).
-  const cardItems = useMemo(
-    () => (freeItems.length ? [...allItems, ...freeItems] : allItems),
-    [allItems, freeItems],
-  )
+  // Todo lo que puede tener ficha abierta, sin repetidos: si un evento está en
+  // la lista de futuros y en la agenda, manda la versión de la agenda.
+  const cardItems = useMemo(() => {
+    const byId = new Map()
+    for (const it of upcoming.items) byId.set(it.id, it)
+    for (const it of allItems) byId.set(it.id, it)
+    for (const it of freeItems) byId.set(it.id, it)
+    return [...byId.values()]
+  }, [allItems, freeItems, upcoming.items])
   const openItem = openId ? (cardItems.find((it) => it.id === openId) ?? null) : null
 
   // Apuntarse a eventos exige el scope "profile" en el token (ver intra.js).
@@ -335,15 +359,17 @@ function App() {
       return next
     })
 
-  const patchItem = (id, patch) =>
+  // Aplica un cambio a un elemento allá donde esté: en la agenda por meses y
+  // en la lista de eventos futuros.
+  const patchItem = (id, patch) => {
+    const apply = (items) => items.map((it) => (it.id === id ? { ...it, ...patch } : it))
     setAgendaByMonth((prev) =>
       Object.fromEntries(
-        Object.entries(prev).map(([key, month]) => [
-          key,
-          { ...month, items: month.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) },
-        ]),
+        Object.entries(prev).map(([key, month]) => [key, { ...month, items: apply(month.items) }]),
       ),
     )
+    setUpcoming((prev) => ({ ...prev, items: apply(prev.items) }))
+  }
 
   // Apuntarse o borrarse de un evento. La ficha se queda abierta, actualizada.
   const toggleSubscription = async (item) => {
@@ -568,8 +594,8 @@ function App() {
             <ItemList
               title="Próximos eventos"
               items={upcomingEvents}
-              status={status}
-              emptyText="Ningún evento en el próximo mes"
+              status={upcoming.status}
+              emptyText={upcoming.error ?? 'Ningún evento futuro en la intra'}
               openItemId={openItem?.id ?? null}
               onOpenItem={openItemCard}
             />
