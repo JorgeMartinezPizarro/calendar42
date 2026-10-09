@@ -1,6 +1,6 @@
 /* Ficha de un elemento de la agenda. Llena el panel que le reserva la vista
-   del día (.dayview__panel): a la derecha de las horas en pantallas anchas y
-   a pantalla completa en móvil. */
+   del día (.dayview__panel): el sitio de las horas en pantallas anchas y
+   toda la pantalla en móvil. */
 .popover {
   --pv-color: #4f8cff;
   --pv-border: rgba(128, 128, 128, 0.35);
@@ -135,6 +135,23 @@
 .popover__button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Hora de inicio de la corrección dentro de la franja libre. */
+.popover__start {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.popover__start select {
+  font: inherit;
+  color: inherit;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--pv-border);
+  border-radius: 6px;
+  background: transparent;
 }
 
 /* "Slot libre / ocupado": si el elemento se solapa con algo del usuario. */

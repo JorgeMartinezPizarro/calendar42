@@ -25,6 +25,133 @@ export function mockSetSubscription(eventId, subscribed) {
   return { subscribed }
 }
 
+// Proyectos de ejemplo: uno cerrado (se puede agendar corrección), otros en
+// curso o ya finalizados.
+const PROJECTS = [
+  { id: 1, projectId: 1314, name: 'minishell', status: 'waiting_for_correction', finalMark: null, validated: null, teamId: 101 },
+  { id: 2, projectId: 1315, name: 'cub3d', status: 'in_progress', finalMark: null, validated: null, teamId: 102 },
+  { id: 3, projectId: 1334, name: 'NetPractice', status: 'in_progress', finalMark: null, validated: null, teamId: 103 },
+  { id: 4, projectId: 1316, name: 'philosophers', status: 'finished', finalMark: 100, validated: true, teamId: 104 },
+  { id: 5, projectId: 1283, name: 'push_swap', status: 'finished', finalMark: 84, validated: true, teamId: 105 },
+  { id: 6, projectId: 1994, name: 'Born2beroot', status: 'finished', finalMark: 110, validated: true, teamId: 106 },
+  { id: 7, projectId: 2004, name: 'Exam Rank 02', status: 'finished', finalMark: 0, validated: false, teamId: 107 },
+]
+
+export function mockProjects() {
+  const now = new Date().toISOString()
+  return PROJECTS.map((p) => ({
+    id: p.id,
+    projectId: p.projectId,
+    name: p.name,
+    slug: p.name.toLowerCase().replace(/\s+/g, '-'),
+    status: p.status,
+    closed: p.status === 'waiting_for_correction',
+    finalMark: p.finalMark,
+    validated: p.validated,
+    markedAt: p.status === 'finished' ? now : null,
+    updatedAt: now,
+    teamId: p.teamId,
+    occurrence: 0,
+  }))
+}
+
+// Slots propios creados o borrados desde la app, correcciones reservadas: en
+// memoria, como el resto del demo.
+let demoNextId = 900_000
+const demoCreatedSlots = [] // elementos tipo slot
+const demoDeletedChunkIds = new Set()
+const demoBookings = [] // elementos tipo correction
+
+/** Abre un slot propio entre dos fechas; lo devuelve ya fusionado. */
+export function mockCreateSlot({ begin, end }) {
+  const chunks = Math.max(1, Math.round((end - begin) / 900_000))
+  const ids = Array.from({ length: chunks }, () => demoNextId++)
+  const item = {
+    id: `slot-${ids[0]}`,
+    type: 'slot',
+    kind: 'slot',
+    name: 'Slot de corrección abierto',
+    description: `Disponible para corregir (${chunks} × 15 min)`,
+    location: '',
+    beginAt: begin.toISOString(),
+    endAt: end.toISOString(),
+    slotIds: ids,
+  }
+  demoCreatedSlots.push(item)
+  return [item]
+}
+
+/** Borra bloques de slot propios (de ejemplo o creados en la sesión). */
+export function mockDeleteSlots(ids) {
+  for (const id of ids) demoDeletedChunkIds.add(id)
+  for (let i = demoCreatedSlots.length - 1; i >= 0; i -= 1) {
+    if (demoCreatedSlots[i].slotIds.some((id) => demoDeletedChunkIds.has(id))) demoCreatedSlots.splice(i, 1)
+  }
+}
+
+const FREE_SLOTS = [
+  { day: 11, start: 10, hours: 2, login: 'alice' },
+  { day: 13, start: 15, hours: 1, login: 'bob' },
+  { day: 16, start: 9, hours: 1.5, login: 'carol' },
+  { day: 20, start: 16, hours: 2, login: 'alice' },
+  { day: 27, start: 11, hours: 1, login: 'dave' },
+]
+
+/** Franjas libres de otros estudiantes para corregir un proyecto. */
+export function mockProjectSlots({ projectId, from, to }) {
+  const items = []
+  const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
+  const push = (begin, hours, login, key) => {
+    if (!inRange(begin, from, to)) return
+    const chunks = Math.round((hours * 60) / 15)
+    items.push({
+      id: `free-${key}`,
+      type: 'free',
+      kind: 'free',
+      name: `Slot libre · ${login}`,
+      description: `Un estudiante puede corregirte en esta franja (${chunks} × 15 min).`,
+      location: '',
+      beginAt: begin.toISOString(),
+      endAt: new Date(begin.getTime() + hours * 3_600_000).toISOString(),
+      slotIds: Array.from({ length: chunks }, (_, k) => key * 10 + k),
+      corrector: { id: 100 + (login.charCodeAt(0) % 10), login },
+    })
+  }
+  while (cursor < to) {
+    const y = cursor.getFullYear()
+    const m = cursor.getMonth()
+    const base = y * 10000 + m * 100
+    FREE_SLOTS.forEach((t, i) => push(at(y, m, t.day, t.start), t.hours, t.login, base + 500 + i + projectId))
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  // Una franja mañana por la mañana, para probar la reserva.
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  push(at(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 10), 2, 'alice', 777_000 + projectId)
+  items.sort((a, b) => a.beginAt.localeCompare(b.beginAt))
+  return items
+}
+
+/** Reserva una corrección de ejemplo (30 min) del proyecto en ese instante. */
+export function mockBookCorrection({ projectId, beginAt }) {
+  const project = PROJECTS.find((p) => p.projectId === projectId)
+  const item = {
+    id: `correction-${demoNextId++}`,
+    type: 'correction',
+    kind: 'correction',
+    name: `Corrección: ${project?.name ?? 'proyecto'}`,
+    description: ['Te corrigen', 'Corrector: alice', 'Reservada desde Calendar42 (demo)'].join('\n'),
+    location: '',
+    beginAt: beginAt.toISOString(),
+    endAt: new Date(beginAt.getTime() + 30 * 60_000).toISOString(),
+    role: 'corrected',
+    done: false,
+    projectId,
+  }
+  demoBookings.push(item)
+  return item
+}
+
 const EVENTS = [
   { day: 2, start: 10, hours: 2, name: 'Charla: Introducción a Docker', kind: 'conference', location: 'Auditorio' },
   { day: 5, start: 16, hours: 1.5, name: 'Rush 01 kick-off', kind: 'rush', location: 'Cluster 1' },
@@ -118,6 +245,8 @@ export function mockAgenda({ from, to }) {
       const begin = at(y, m, t.day, t.start)
       if (!inRange(begin, from, to)) return
       const chunks = Math.round((t.hours * 60) / 15)
+      const slotIds = Array.from({ length: chunks }, (_, k) => base + i * 10 + k)
+      if (slotIds.some((id) => demoDeletedChunkIds.has(id))) return
       items.push({
         id: `slot-${base + i}`,
         type: 'slot',
@@ -127,7 +256,7 @@ export function mockAgenda({ from, to }) {
         location: '',
         beginAt: begin.toISOString(),
         endAt: new Date(begin.getTime() + t.hours * 3_600_000).toISOString(),
-        slotIds: Array.from({ length: chunks }, (_, k) => base + i * 10 + k),
+        slotIds,
       })
     })
 
@@ -176,7 +305,7 @@ export function mockAgenda({ from, to }) {
         })
       }
       const slot = at(y, m, d, 18)
-      if (inRange(slot, from, to)) {
+      if (inRange(slot, from, to) && ![base + 990, base + 991, base + 992, base + 993].some((id) => demoDeletedChunkIds.has(id))) {
         items.push({
           id: `slot-${base + 99}`,
           type: 'slot',
@@ -192,6 +321,11 @@ export function mockAgenda({ from, to }) {
     }
 
     cursor.setMonth(cursor.getMonth() + 1)
+  }
+
+  // Lo creado desde la app en esta sesión demo.
+  for (const it of [...demoCreatedSlots, ...demoBookings]) {
+    if (inRange(new Date(it.beginAt), from, to)) items.push(it)
   }
 
   items.sort((a, b) => a.beginAt.localeCompare(b.beginAt))

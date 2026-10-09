@@ -1,0 +1,76 @@
+.projects {
+  --pj-border: rgba(128, 128, 128, 0.25);
+  --pj-muted: rgba(128, 128, 128, 0.7);
+  --pj-accent: #a55eea;
+  --pj-free: #0fb9b1;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  border: 1px solid var(--pj-border);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+
+.projects__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pj-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.projects__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.projects__label {
+  font-size: 0.8rem;
+}
+
+.projects__select {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--pj-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.projects__select:hover,
+.projects__select:focus-visible {
+  border-color: var(--pj-accent);
+  outline: none;
+}
+
+.projects__select option:disabled {
+  color: var(--pj-muted);
+}
+
+.projects__detail,
+.projects__empty,
+.projects__slots {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--pj-muted);
+}
+
+/* Estado de los slots libres del proyecto elegido. */
+.projects__slots {
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--pj-border);
+  color: var(--pj-free);
+}
+
+.projects__slots--error,
+.projects__empty--error {
+  color: #ff5c5c;
+}

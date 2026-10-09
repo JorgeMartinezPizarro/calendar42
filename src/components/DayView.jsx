@@ -1,15 +1,21 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TYPE_COLORS } from '../agendaTypes.js'
 import { useNow } from '../hooks/useNow.js'
+import { MIN_SLOT_MINUTES } from '../subscription.js'
 import { addDays, formatLongDate, formatTime, isSameDay, startOfDay } from '../utils/date.js'
 import './DayView.css'
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
 const DEFAULT_SCROLL_HOUR = 8
 const MINUTES_PER_DAY = 24 * 60
+const SNAP_MINUTES = 15
 
 function pad(n) {
   return String(n).padStart(2, '0')
+}
+
+function formatMinutes(min) {
+  return `${pad(Math.floor(min / 60))}:${pad(min % 60)}`
 }
 
 /**
@@ -62,6 +68,8 @@ function itemMeta(item) {
   switch (item.type) {
     case 'slot':
       return time
+    case 'free':
+      return `${time} · pulsa para agendar`
     case 'correction':
       return `${time} · ${item.role === 'corrector' ? 'corriges' : 'te corrigen'}${item.done ? ' · hecha' : ''}`
     default:
@@ -75,10 +83,25 @@ function itemMeta(item) {
  *   la ficha ocupa su sitio (en móvil, toda la pantalla, por CSS).
  * - openItemId: id del elemento cuya ficha está abierta, para resaltarlo.
  * - onOpenItem(item): abrir la ficha (clic, Enter o Espacio).
+ * - selectable: en el modo "Crear slots", arrastrar sobre las horas marca una
+ *   franja (bloques de 15 min) y llama a onRangeSelect({ beginAt, endAt }).
+ * - draft: franja ya marcada y pendiente de crear, que se dibuja en punteado.
  */
-function DayView({ date, items = [], status, panel = null, openItemId = null, onOpenItem }) {
+function DayView({
+  date,
+  items = [],
+  status,
+  panel = null,
+  openItemId = null,
+  onOpenItem,
+  selectable = false,
+  draft = null,
+  onRangeSelect,
+}) {
   const now = useNow()
   const scrollRef = useRef(null)
+  const hoursRef = useRef(null)
+  const [drag, setDrag] = useState(null) // { anchor, startMin, endMin } mientras se arrastra
   const isToday = isSameDay(date, now)
   const nowOffsetPct = ((now.getHours() * 60 + now.getMinutes()) / MINUTES_PER_DAY) * 100
   const laidOut = layoutItems(items, date)
@@ -109,11 +132,68 @@ function DayView({ date, items = [], status, panel = null, openItemId = null, on
     }
   }
 
+  // ---- arrastrar para marcar una franja (modo "Crear slots") ----------------
+  const minutesAt = (clientY) => {
+    const rect = hoursRef.current.getBoundingClientRect()
+    const raw = ((clientY - rect.top) / rect.height) * MINUTES_PER_DAY
+    const snapped = Math.round(raw / SNAP_MINUTES) * SNAP_MINUTES
+    return Math.max(0, Math.min(MINUTES_PER_DAY, snapped))
+  }
+
+  const onPointerDown = (e) => {
+    if (!selectable || e.button !== 0 || e.target.closest('.dayview__event')) return
+    e.preventDefault()
+    try {
+      hoursRef.current.setPointerCapture(e.pointerId)
+    } catch {
+      // Sin captura el arrastre sigue funcionando mientras el puntero esté sobre la rejilla.
+    }
+    const m = Math.min(minutesAt(e.clientY), MINUTES_PER_DAY - MIN_SLOT_MINUTES)
+    setDrag({ anchor: m, startMin: m, endMin: m + MIN_SLOT_MINUTES })
+  }
+
+  const onPointerMove = (e) => {
+    if (!drag) return
+    const m = minutesAt(e.clientY)
+    setDrag((d) => {
+      if (!d) return d
+      const lo = Math.min(d.anchor, m)
+      const hi = Math.max(d.anchor, m)
+      const endMin = Math.min(MINUTES_PER_DAY, Math.max(hi, lo + MIN_SLOT_MINUTES))
+      return { ...d, startMin: Math.min(lo, endMin - MIN_SLOT_MINUTES), endMin }
+    })
+  }
+
+  const onPointerUp = () => {
+    if (!drag) return
+    const dayStart = startOfDay(date)
+    onRangeSelect?.({
+      beginAt: new Date(dayStart.getTime() + drag.startMin * 60_000),
+      endAt: new Date(dayStart.getTime() + drag.endMin * 60_000),
+    })
+    setDrag(null)
+  }
+
+  // Franja en punteado: la que se está arrastrando o la pendiente de crear.
+  let draftBlock = null
+  if (drag) {
+    draftBlock = { startMin: drag.startMin, endMin: drag.endMin }
+  } else if (draft && isSameDay(draft.beginAt, date)) {
+    const dayStart = startOfDay(date)
+    draftBlock = {
+      startMin: (draft.beginAt - dayStart) / 60_000,
+      endMin: Math.min(MINUTES_PER_DAY, (draft.endAt - dayStart) / 60_000),
+    }
+  }
+
   return (
     <section className="dayview" aria-label="Vista del día por horas">
       <header className="dayview__header">
         <h2 className="dayview__title">{formatLongDate(date)}</h2>
         {isToday && <span className="dayview__badge">Hoy</span>}
+        {selectable && (
+          <span className="dayview__badge dayview__badge--hint">Arrastra para crear un slot</span>
+        )}
         <span className="dayview__count">
           {status === 'loading'
             ? 'Cargando…'
@@ -124,7 +204,14 @@ function DayView({ date, items = [], status, panel = null, openItemId = null, on
       </header>
 
       <div className="dayview__scroll" ref={scrollRef}>
-        <div className="dayview__hours">
+        <div
+          className={`dayview__hours${selectable ? ' dayview__hours--selectable' : ''}`}
+          ref={hoursRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => setDrag(null)}
+        >
           {HOURS.map((h) => (
             <div key={h} className="dayview__hour">
               <span className="dayview__hour-label">{pad(h)}:00</span>
@@ -176,6 +263,22 @@ function DayView({ date, items = [], status, panel = null, openItemId = null, on
                 </article>
               )
             })}
+
+            {draftBlock && (
+              <div
+                className="dayview__draft"
+                style={{
+                  top: `${(draftBlock.startMin / MINUTES_PER_DAY) * 100}%`,
+                  height: `${((draftBlock.endMin - draftBlock.startMin) / MINUTES_PER_DAY) * 100}%`,
+                }}
+                aria-hidden="true"
+              >
+                <strong>Nuevo slot</strong>
+                <span>
+                  {formatMinutes(draftBlock.startMin)} – {formatMinutes(draftBlock.endMin)}
+                </span>
+              </div>
+            )}
           </div>
 
           {isToday && (

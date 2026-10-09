@@ -1,0 +1,95 @@
+.slotcreator {
+  --sc-border: rgba(128, 128, 128, 0.25);
+  --sc-muted: rgba(128, 128, 128, 0.7);
+  --sc-color: #20bf6b;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--sc-border);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+
+.slotcreator__title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sc-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.slotcreator__hint,
+.slotcreator__ok {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--sc-muted);
+}
+
+.slotcreator__ok {
+  color: var(--sc-color);
+}
+
+.slotcreator__pending {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--sc-color);
+  border-radius: 8px;
+}
+
+.slotcreator__range {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.slotcreator__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.slotcreator__button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--sc-color);
+  background: var(--sc-color);
+  color: #fff;
+  cursor: pointer;
+}
+
+.slotcreator__button--secondary {
+  background: transparent;
+  color: inherit;
+  border-color: var(--sc-border);
+}
+
+.slotcreator__button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.slotcreator__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Motivo (naranja) o error de la intra (rojo), junto al botón. */
+.slotcreator__reason,
+.slotcreator__error {
+  flex-basis: 100%;
+  font-size: 0.8rem;
+}
+
+.slotcreator__reason {
+  color: #ff9f43;
+}
+
+.slotcreator__error {
+  color: #ff5c5c;
+}

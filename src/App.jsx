@@ -1,18 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import AvailableList from './components/AvailableList.jsx'
 import Calendar from './components/Calendar.jsx'
 import DayView from './components/DayView.jsx'
+import ItemList from './components/ItemList.jsx'
 import ItemPopover from './components/ItemPopover.jsx'
 import LoginView from './components/LoginView.jsx'
-import TypeFilter from './components/TypeFilter.jsx'
-import { AGENDA_TYPES, DEFAULT_FILTERS, countByFilter, isAvailable, isItemVisible } from './agendaTypes.js'
+import ModeBar from './components/ModeBar.jsx'
+import ProjectPicker from './components/ProjectPicker.jsx'
+import SlotCreator from './components/SlotCreator.jsx'
+import { AGENDA_TYPES, isMine } from './agendaTypes.js'
 import { fetchMe, logout } from './api/auth.js'
 import { fetchAgenda } from './api/agenda.js'
 import { setEventSubscription } from './api/events.js'
+import { fetchProjects } from './api/projects.js'
+import { bookCorrection, createSlot, deleteSlots, fetchProjectSlots } from './api/slots.js'
 import { useNow } from './hooks/useNow.js'
-import { overlappingItems, subscriptionState } from './subscription.js'
+import {
+  bookingState,
+  overlappingItems,
+  slotDeleteState,
+  subscriptionState,
+} from './subscription.js'
 import { getMonthGridRange, toDateKey } from './utils/date.js'
 import './App.css'
+
+const EMPTY = []
+const NO_PROJECTS = { status: 'idle', items: EMPTY, error: null }
+const LOADING = { status: 'loading', items: EMPTY, error: null }
+const IDLE_ACTION = { busy: false, error: null, created: null }
 
 function monthKey(date) {
   return `${date.getFullYear()}-${date.getMonth()}`
@@ -59,6 +73,8 @@ function App() {
   const handleLogout = async () => {
     await logout()
     setAgendaByMonth({})
+    setProjects(NO_PROJECTS)
+    setFreeSlotsByKey({})
     await backToLogin()
   }
 
@@ -66,7 +82,6 @@ function App() {
   const today = new Date()
   const [selectedDate, setSelectedDate] = useState(today)
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
-  const [enabledFilters, setEnabledFilters] = useState(DEFAULT_FILTERS)
   const now = useNow()
 
   // Agenda cacheada por mes visible: { 'YYYY-M': { items, counts, warnings } }
@@ -105,6 +120,7 @@ function App() {
   }, [loggedIn, currentKey, viewDate, agendaByMonth])
 
   const currentMonth = agendaByMonth[currentKey]
+  const monthItems = currentMonth?.items ?? EMPTY
 
   // Todo lo cargado, sin repetidos: las rejillas de dos meses seguidos
   // comparten días, así que un mismo elemento puede venir en ambos.
@@ -116,24 +132,104 @@ function App() {
     return [...byId.values()]
   }, [agendaByMonth])
 
-  // Lo que va al calendario y a la vista del día: lo del usuario, según el filtro.
-  const visibleItems = useMemo(
-    () => allItems.filter((it) => isItemVisible(it, enabledFilters)),
-    [allItems, enabledFilters],
+  // Lo del usuario: va siempre al calendario y a la vista del día.
+  const visibleItems = useMemo(() => allItems.filter(isMine), [allItems])
+
+  // Listas de los modos "Exámenes" (disponibles) y "Eventos" (todos, inscrito
+  // o no): solo los del mes visible que aún no han terminado.
+  const availableExams = useMemo(
+    () => monthItems.filter((it) => it.type === 'exam' && !it.subscribed && it.endAt > now),
+    [monthItems, now],
+  )
+  const upcomingEvents = useMemo(
+    () => monthItems.filter((it) => it.type === 'event' && it.endAt > now),
+    [monthItems, now],
   )
 
-  // Eventos y exámenes del mes visible sin inscripción y que aún no han terminado.
-  const availableItems = useMemo(
-    () => (currentMonth?.items ?? []).filter((it) => isAvailable(it) && it.endAt > now),
-    [currentMonth, now],
-  )
+  // Olvida el mes visible para que el efecto de carga vuelva a pedirlo.
+  const retryMonth = () =>
+    setAgendaByMonth((prev) => {
+      const next = { ...prev }
+      delete next[currentKey]
+      return next
+    })
 
-  const filterCounts = useMemo(() => countByFilter(currentMonth?.items ?? []), [currentMonth])
+  // ---- modos --------------------------------------------------------------
+  // Correcciones, Exámenes, Eventos y Crear slots. Junto a cada botón, lo que
+  // la API no permite (motivo) o el último error de la intra en ese modo.
+  const [mode, setMode] = useState('corrections')
+  const [modeNotes, setModeNotes] = useState({
+    exams: { kind: 'reason', text: 'La API no deja inscribirse a exámenes: solo desde la intra' },
+  })
+  const noteMode = useCallback((key, kind, text) => {
+    setModeNotes((prev) => ({ ...prev, [key]: text ? { kind, text } : undefined }))
+  }, [])
+
+  // ---- proyectos y slots libres (modo Correcciones) ------------------------
+  const [projects, setProjects] = useState(NO_PROJECTS)
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
+  const selectedProject = projects.items.find((p) => p.id === selectedProjectId) ?? null
+
+  useEffect(() => {
+    if (!loggedIn) return
+    const controller = new AbortController()
+    setProjects((prev) => ({ ...prev, status: 'loading', error: null }))
+    fetchProjects({ signal: controller.signal })
+      .then((items) => setProjects({ status: 'idle', items, error: null }))
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        if (err.status === 401) {
+          backToLogin()
+          return
+        }
+        setProjects({ status: 'error', items: EMPTY, error: err.message })
+      })
+    return () => controller.abort()
+  }, [loggedIn])
+
+  // Slots libres de otros estudiantes para el proyecto cerrado elegido, por
+  // proyecto y mes visible: { 'projectId:YYYY-M': { status, items, error } }.
+  const [freeSlotsByKey, setFreeSlotsByKey] = useState({})
+  const freeProjectId = mode === 'corrections' && selectedProject?.closed ? selectedProject.projectId : null
+  const freeKey = freeProjectId ? `${freeProjectId}:${currentKey}` : null
+
+  useEffect(() => {
+    if (!loggedIn || !freeKey || freeSlotsByKey[freeKey]) return
+    const controller = new AbortController()
+    const { start, end } = getMonthGridRange(viewDate.getFullYear(), viewDate.getMonth())
+    fetchProjectSlots(freeProjectId, start, end, { signal: controller.signal })
+      .then((items) =>
+        setFreeSlotsByKey((prev) => ({ ...prev, [freeKey]: { status: 'idle', items, error: null } })),
+      )
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        if (err.status === 401) {
+          backToLogin()
+          return
+        }
+        setFreeSlotsByKey((prev) => ({
+          ...prev,
+          [freeKey]: { status: 'error', items: EMPTY, error: err.message },
+        }))
+        if (err.status === 403) noteMode('corrections', 'reason', err.message)
+      })
+    return () => controller.abort()
+  }, [loggedIn, freeKey, freeProjectId, freeSlotsByKey, viewDate, noteMode])
+
+  const freeSlots = freeKey ? (freeSlotsByKey[freeKey] ?? LOADING) : null
+  const freeItems = freeSlots?.items ?? EMPTY
+
+  // Lo que se pinta en el día y marca el calendario: lo del usuario y, en
+  // Correcciones, las franjas libres del proyecto elegido.
+  const dayItems = useMemo(
+    () => (freeItems.length ? [...visibleItems, ...freeItems] : visibleItems),
+    [visibleItems, freeItems],
+  )
 
   // Día (clave local) -> Set de tipos presentes, para las marcas del calendario.
   const dayTypes = useMemo(() => {
     const map = new Map()
-    for (const it of visibleItems) {
+    for (const it of dayItems) {
       // Un elemento que dura varios días marca cada uno de ellos.
       const cursor = new Date(it.beginAt.getFullYear(), it.beginAt.getMonth(), it.beginAt.getDate())
       while (cursor < it.endAt) {
@@ -144,17 +240,7 @@ function App() {
       }
     }
     return map
-  }, [visibleItems])
-
-  const toggleFilter = (key) => setEnabledFilters((prev) => ({ ...prev, [key]: !prev[key] }))
-
-  // Olvida el mes visible para que el efecto de carga vuelva a pedirlo.
-  const retryMonth = () =>
-    setAgendaByMonth((prev) => {
-      const next = { ...prev }
-      delete next[currentKey]
-      return next
-    })
+  }, [dayItems])
 
   // ---- ficha --------------------------------------------------------------
   // Se abre al pulsar un elemento (lista o vista del día) y ocupa el sitio de
@@ -169,25 +255,42 @@ function App() {
     setOpenId(null)
   }, [])
 
+  const changeMode = useCallback((next) => {
+    setMode(next)
+    setOpenId(null)
+  }, [])
+
   // Siempre la versión más reciente del elemento (cambia al apuntarse o borrarse).
-  const openItem = openId ? (allItems.find((it) => it.id === openId) ?? null) : null
+  const cardItems = useMemo(
+    () => (freeItems.length ? [...allItems, ...freeItems] : allItems),
+    [allItems, freeItems],
+  )
+  const openItem = openId ? (cardItems.find((it) => it.id === openId) ?? null) : null
 
   // Apuntarse a eventos exige el scope "profile" en el token (ver intra.js).
   // Si la sesión no lo tiene, el botón sale desactivado con el motivo en vez
   // de fallar al pulsarlo. Sin dato de scope (sesiones antiguas) se intenta.
   const scopeOk = Boolean(auth.demo) || !auth.scope || auth.scope.split(' ').includes('profile')
 
-  // "Slot libre / ocupado": lo del usuario que se solapa con el evento o examen de la ficha.
+  // "Slot libre / ocupado": lo del usuario que se solapa con el elemento de la ficha.
   const conflicts = useMemo(
     () =>
-      openItem && (openItem.type === 'event' || openItem.type === 'exam')
+      openItem && ['event', 'exam', 'free'].includes(openItem.type)
         ? overlappingItems(openItem, allItems)
         : null,
     [openItem, allItems],
   )
 
-  // ---- apuntarse / borrarse -----------------------------------------------
-  const [actions, setActions] = useState({}) // id -> { busy, error }
+  // ---- acciones sobre la intra --------------------------------------------
+  const [actions, setActions] = useState({}) // id del elemento -> { busy, error }
+  const startAction = (id) => setActions((prev) => ({ ...prev, [id]: { busy: true, error: null } }))
+  const endAction = (id, error = null) =>
+    setActions((prev) => {
+      const next = { ...prev }
+      if (error) next[id] = { busy: false, error }
+      else delete next[id]
+      return next
+    })
 
   const patchItem = (id, patch) =>
     setAgendaByMonth((prev) =>
@@ -199,11 +302,10 @@ function App() {
       ),
     )
 
-  // La ficha se queda abierta tras la operación, ya actualizada: así se ve
-  // el cambio (inscrito o no, aforo) y se puede deshacer al momento.
+  // Apuntarse o borrarse de un evento. La ficha se queda abierta, actualizada.
   const toggleSubscription = async (item) => {
     const subscribe = !item.subscribed
-    setActions((prev) => ({ ...prev, [item.id]: { busy: true, error: null } }))
+    startAction(item.id)
     try {
       const result = await setEventSubscription(item.eventId, subscribe)
       patchItem(item.id, {
@@ -211,17 +313,87 @@ function App() {
         subscribers:
           result.subscribers ?? Math.max(0, (item.subscribers ?? 0) + (result.subscribed ? 1 : -1)),
       })
-      setActions((prev) => {
+      endAction(item.id)
+      noteMode('events', 'error', null)
+    } catch (err) {
+      if (err.status === 401) return backToLogin()
+      endAction(item.id, err.message)
+      if (err.status === 403) noteMode('events', 'reason', err.message)
+    }
+  }
+
+  // Reservar una corrección del proyecto elegido en una franja libre.
+  const book = async (item, startAt) => {
+    if (!selectedProject) return
+    startAction(item.id)
+    try {
+      await bookCorrection({
+        projectId: selectedProject.projectId,
+        teamId: selectedProject.teamId,
+        beginAt: startAt,
+        correctorId: item.corrector?.id ?? null,
+      })
+      endAction(item.id)
+      noteMode('corrections', 'error', null)
+      closeItem()
+      // La agenda y los slots libres del mes cambian: se vuelven a pedir.
+      setFreeSlotsByKey((prev) => {
         const next = { ...prev }
-        delete next[item.id]
+        delete next[freeKey]
         return next
       })
+      retryMonth()
     } catch (err) {
-      if (err.status === 401) {
-        backToLogin()
-        return
-      }
-      setActions((prev) => ({ ...prev, [item.id]: { busy: false, error: err.message } }))
+      if (err.status === 401) return backToLogin()
+      endAction(item.id, err.message)
+      noteMode('corrections', err.status === 403 ? 'reason' : 'error', err.message)
+    }
+  }
+
+  // Borrar un slot propio (todos sus bloques de 15 min).
+  const removeSlot = async (item) => {
+    startAction(item.id)
+    try {
+      await deleteSlots(item.slotIds)
+      endAction(item.id)
+      noteMode('slots', 'error', null)
+      closeItem()
+      retryMonth()
+    } catch (err) {
+      if (err.status === 401) return backToLogin()
+      endAction(item.id, err.message)
+      noteMode('slots', err.status === 403 ? 'reason' : 'error', err.message)
+    }
+  }
+
+  // ---- crear slots --------------------------------------------------------
+  const [pendingRange, setPendingRange] = useState(null) // { beginAt, endAt } marcada en las horas
+  const [slotAction, setSlotAction] = useState(IDLE_ACTION)
+
+  const selectRange = useCallback((range) => {
+    setPendingRange(range)
+    setSlotAction(IDLE_ACTION)
+    setOpenId(null)
+  }, [])
+
+  // Cambiar de modo o de día descarta la franja marcada.
+  useEffect(() => {
+    setPendingRange(null)
+  }, [mode, selectedDate])
+
+  const createPendingSlot = async () => {
+    if (!pendingRange) return
+    setSlotAction({ busy: true, error: null, created: null })
+    try {
+      const items = await createSlot(pendingRange)
+      setSlotAction({ busy: false, error: null, created: items[0] ?? pendingRange })
+      setPendingRange(null)
+      noteMode('slots', 'error', null)
+      retryMonth()
+    } catch (err) {
+      if (err.status === 401) return backToLogin()
+      setSlotAction({ busy: false, error: err.message, created: null })
+      noteMode('slots', err.status === 403 ? 'reason' : 'error', err.message)
     }
   }
 
@@ -249,9 +421,17 @@ function App() {
     <ItemPopover
       item={openItem}
       subscription={subscriptionState(openItem, now, { scopeOk })}
+      booking={
+        openItem.type === 'free'
+          ? { project: selectedProject, state: bookingState(openItem, selectedProject, now) }
+          : null
+      }
+      slotDelete={slotDeleteState(openItem, now)}
       conflicts={conflicts}
       action={actions[openItem.id]}
       onToggleSubscription={toggleSubscription}
+      onBook={book}
+      onDeleteSlot={removeSlot}
       onClose={closeItem}
     />
   )
@@ -319,22 +499,59 @@ function App() {
             onSelectDate={selectDate}
             dayTypes={dayTypes}
           />
-          <TypeFilter enabled={enabledFilters} counts={filterCounts} onToggle={toggleFilter} />
-          <AvailableList
-            items={availableItems}
-            status={status}
-            openItemId={openItem?.id ?? null}
-            onOpenItem={openItemCard}
-          />
+          <ModeBar mode={mode} onChange={changeMode} notes={modeNotes} />
+
+          {mode === 'corrections' && (
+            <ProjectPicker
+              projects={projects.items}
+              status={projects.status}
+              error={projects.error}
+              selectedId={selectedProjectId}
+              onSelect={setSelectedProjectId}
+              freeSlots={freeSlots}
+            />
+          )}
+          {mode === 'exams' && (
+            <ItemList
+              title="Próximos exámenes"
+              items={availableExams}
+              status={status}
+              emptyText="Ningún examen disponible este mes"
+              openItemId={openItem?.id ?? null}
+              onOpenItem={openItemCard}
+            />
+          )}
+          {mode === 'events' && (
+            <ItemList
+              title="Próximos eventos"
+              items={upcomingEvents}
+              status={status}
+              emptyText="Ningún evento pendiente este mes"
+              openItemId={openItem?.id ?? null}
+              onOpenItem={openItemCard}
+            />
+          )}
+          {mode === 'slots' && (
+            <SlotCreator
+              pending={pendingRange}
+              action={slotAction}
+              now={now}
+              onCreate={createPendingSlot}
+              onCancel={() => setPendingRange(null)}
+            />
+          )}
         </aside>
         <section className="app__content">
           <DayView
             date={selectedDate}
-            items={visibleItems}
+            items={dayItems}
             status={status}
             panel={panel}
             openItemId={openItem?.id ?? null}
             onOpenItem={openItemCard}
+            selectable={mode === 'slots'}
+            draft={mode === 'slots' ? pendingRange : null}
+            onRangeSelect={selectRange}
           />
         </section>
       </main>

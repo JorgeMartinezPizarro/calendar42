@@ -4,15 +4,30 @@ import { randomUUID } from 'node:crypto'
 import {
   OAUTH_SCOPES,
   authorizeUrl,
+  bookCorrection,
+  createSlot,
+  deleteSlots,
   exchangeCode,
   fetchAgenda,
   fetchMe,
+  fetchMyProjects,
+  fetchProjectSlots,
   hasAppCredentials,
+  isNotAuthorized,
   refreshTokens,
   subscribeToEvent,
   unsubscribeFromEvent,
 } from './intra.js'
-import { mockAgenda, mockCoalition, mockSetSubscription } from './mock.js'
+import {
+  mockAgenda,
+  mockBookCorrection,
+  mockCoalition,
+  mockCreateSlot,
+  mockDeleteSlots,
+  mockProjectSlots,
+  mockProjects,
+  mockSetSubscription,
+} from './mock.js'
 import {
   SESSION_COOKIE,
   STATE_COOKIE,
@@ -59,6 +74,30 @@ function sessionExpired(req, res) {
   destroySession(req.sessionId)
   clearCookie(res, SESSION_COOKIE)
   return res.status(401).json({ error: 'La sesión ha caducado, vuelve a iniciar sesión' })
+}
+
+/**
+ * Responde un fallo de la intra con un mensaje claro y lo deja en el log con
+ * la respuesta completa. `hint` se añade cuando la intra no autoriza la acción.
+ */
+function sendIntraFailure(req, res, err, what, { hint = '' } = {}) {
+  console.error(`[${what}] ${req.session?.user?.login ?? '?'}:`, err.message)
+  if (err.body) console.error(`[${what}] respuesta de la intra:`, err.body)
+  if (err.status === 401 && !isNotAuthorized(err)) return sessionExpired(req, res)
+  const status = { 400: 400, 401: 403, 403: 403, 404: 404, 422: 409 }[err.status] ?? 502
+  // Sin el scope necesario la intra responde 403 "Insufficient scope".
+  const missingScope = err.status === 403 && /scope/i.test(String(err.reason))
+  let message
+  if (missingScope) {
+    message = `La sesión no tiene el scope que pide la intra (${err.reason}). Actívalo en la app OAuth de la intra, cierra sesión y vuelve a entrar.`
+  } else if (isNotAuthorized(err)) {
+    message = `La intra no autoriza esta operación con tu cuenta (${err.status}: ${err.reason}).${hint ? ` ${hint}` : ''}`
+  } else if (err.reason) {
+    message = `La intra no ha aceptado la operación: ${err.reason}`
+  } else {
+    message = err.message
+  }
+  res.status(status).json({ error: message })
 }
 
 // ---------------------------------------------------------------------------
@@ -212,14 +251,59 @@ app.get('/api/agenda', requireSession, async (req, res) => {
 })
 
 // ---------------------------------------------------------------------------
+// Proyectos
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/projects
+ * Proyectos del usuario en su cursus con su estado. Los cerrados (pendientes
+ * de corrección) son los que admiten agendar una corrección.
+ * Respuesta: { projects: [...] }
+ */
+app.get('/api/projects', requireSession, async (req, res) => {
+  const session = req.session
+  const source = session.demo ? 'mock' : 'intra'
+  const key = `projects:${source}:${session.user.id}`
+  const hit = agendaCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) return res.json(hit.payload)
+
+  try {
+    let projects
+    if (session.demo) {
+      projects = mockProjects()
+    } else {
+      const token = await validAccessToken(session)
+      projects = await fetchMyProjects(token, {
+        userId: session.user.id,
+        cursusId: session.user.cursusId ?? null,
+      })
+    }
+    const payload = { projects }
+    agendaCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, payload })
+    res.json(payload)
+  } catch (err) {
+    console.error('[projects]', err.message)
+    if (err.status === 401) return sessionExpired(req, res)
+    const message =
+      err.status === 403
+        ? 'La intra no deja leer tus proyectos con esta sesión. Cierra sesión y vuelve a entrar.'
+        : err.message
+    res.status(err.status === 403 ? 403 : 502).json({ error: message })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // Inscripción a eventos
 // ---------------------------------------------------------------------------
 
-/** Olvida la agenda cacheada de un usuario (tras apuntarse o borrarse de algo). */
+/**
+ * Olvida la agenda cacheada de un usuario y los slots libres que consultó
+ * (tras apuntarse a algo, crear o borrar un slot, o reservar una corrección).
+ */
 function forgetAgendaOf(source, userId) {
-  const prefix = `${source}:${userId}:`
+  const prefixes = [`${source}:${userId}:`, `pslots:${source}:${userId}:`]
   for (const key of agendaCache.keys()) {
-    if (key.startsWith(prefix)) agendaCache.delete(key)
+    if (prefixes.some((p) => key.startsWith(p))) agendaCache.delete(key)
   }
 }
 
@@ -250,19 +334,142 @@ async function setSubscription(req, res, subscribed) {
     forgetAgendaOf(source, session.user.id)
     res.json({ ok: true, subscribed, subscribers: event?.subscribers ?? null })
   } catch (err) {
-    console.error('[events]', err.message)
-    if (err.status === 401) return sessionExpired(req, res)
-    const status = { 403: 403, 404: 404, 422: 409 }[err.status] ?? 502
-    // Sin el scope "profile" la intra responde 403 "Insufficient scope".
-    const missingScope = err.status === 403 && /scope/i.test(String(err.reason))
-    const message = missingScope
-      ? 'La sesión no tiene el scope "profile", necesario para apuntarse. Actívalo en la app OAuth de la intra, cierra sesión y vuelve a entrar.'
-      : err.reason
-        ? `La intra no ha aceptado la operación: ${err.reason}`
-        : err.message
-    res.status(status).json({ error: message })
+    sendIntraFailure(req, res, err, `events ${subscribed ? 'alta' : 'baja'} ${eventId}`, {
+      hint:
+        'Puede que el evento no admita inscripciones para tu cursus o campus, o que la API no deje a los estudiantes apuntarse. ' +
+        'Comprueba si puedes apuntarte a ese mismo evento desde la web de la intra.',
+    })
   }
 }
+
+// ---------------------------------------------------------------------------
+// Slots propios y correcciones
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/slots  { beginAt, endAt }  → abre un slot de corrección propio.
+ * Respuesta: { ok, items } con los bloques creados ya fusionados.
+ */
+app.post('/api/slots', requireSession, async (req, res) => {
+  const begin = parseDate(req.body?.beginAt, null)
+  const end = parseDate(req.body?.endAt, null)
+  if (!begin || !end || end <= begin) {
+    return res.status(400).json({ error: 'Franja inválida: hacen falta beginAt y endAt (ISO), con fin posterior al inicio' })
+  }
+  const session = req.session
+  const source = session.demo ? 'mock' : 'intra'
+  try {
+    let items
+    if (session.demo) {
+      items = mockCreateSlot({ begin, end })
+    } else {
+      const token = await validAccessToken(session)
+      items = await createSlot(token, {
+        userId: session.user.id,
+        beginAt: begin.toISOString(),
+        endAt: end.toISOString(),
+      })
+    }
+    forgetAgendaOf(source, session.user.id)
+    res.json({ ok: true, items })
+  } catch (err) {
+    sendIntraFailure(req, res, err, 'slots alta')
+  }
+})
+
+/** DELETE /api/slots  { ids: [...] }  → borra bloques de slot propios. */
+app.delete('/api/slots', requireSession, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number) : []
+  if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    return res.status(400).json({ error: 'Hacen falta los ids de los bloques del slot' })
+  }
+  const session = req.session
+  const source = session.demo ? 'mock' : 'intra'
+  try {
+    if (session.demo) {
+      mockDeleteSlots(ids)
+    } else {
+      await deleteSlots(await validAccessToken(session), ids)
+    }
+    forgetAgendaOf(source, session.user.id)
+    res.json({ ok: true })
+  } catch (err) {
+    sendIntraFailure(req, res, err, 'slots baja')
+  }
+})
+
+/**
+ * GET /api/projects/:id/slots?from&to  → franjas libres de otros estudiantes
+ * para corregir ese proyecto. Respuesta: { items } (type 'free').
+ */
+app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
+  const projectId = Number(req.params.id)
+  const now = new Date()
+  const from = parseDate(req.query.from, now)
+  const to = parseDate(req.query.to, new Date(now.getTime() + 30 * 86_400_000))
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: 'Id de proyecto inválido' })
+  }
+  if (!from || !to || to <= from) {
+    return res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
+  }
+  const session = req.session
+  const source = session.demo ? 'mock' : 'intra'
+  const key = `pslots:${source}:${session.user.id}:${projectId}:${from.toISOString()}:${to.toISOString()}`
+  const hit = agendaCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) return res.json(hit.payload)
+
+  try {
+    let items
+    if (session.demo) {
+      items = mockProjectSlots({ projectId, from, to })
+    } else {
+      items = await fetchProjectSlots(await validAccessToken(session), { projectId, from, to })
+    }
+    const payload = { items }
+    agendaCache.set(key, { expiresAt: Date.now() + 60_000, payload })
+    res.json(payload)
+  } catch (err) {
+    sendIntraFailure(req, res, err, `slots libres ${projectId}`, {
+      hint: 'Puede que la API no deje a los estudiantes consultar los slots de un proyecto.',
+    })
+  }
+})
+
+/**
+ * POST /api/corrections  { projectId, teamId, beginAt, correctorId? }
+ * → reserva una corrección del proyecto en ese instante.
+ */
+app.post('/api/corrections', requireSession, async (req, res) => {
+  const projectId = Number(req.body?.projectId)
+  const teamId = Number(req.body?.teamId)
+  const begin = parseDate(req.body?.beginAt, null)
+  const correctorId = req.body?.correctorId ? Number(req.body.correctorId) : null
+  if (!Number.isInteger(projectId) || projectId <= 0 || !Number.isInteger(teamId) || teamId <= 0 || !begin) {
+    return res.status(400).json({ error: 'Hacen falta projectId, teamId y beginAt (ISO)' })
+  }
+  const session = req.session
+  const source = session.demo ? 'mock' : 'intra'
+  try {
+    let item = null
+    if (session.demo) {
+      item = mockBookCorrection({ projectId, beginAt: begin })
+    } else {
+      await bookCorrection(await validAccessToken(session), {
+        projectId,
+        teamId,
+        beginAt: begin.toISOString(),
+        correctorId,
+      })
+    }
+    forgetAgendaOf(source, session.user.id)
+    res.json({ ok: true, item })
+  } catch (err) {
+    sendIntraFailure(req, res, err, `corrección ${projectId}`, {
+      hint: 'La reserva de correcciones puede estar reservada al personal en la API; en ese caso hay que agendarla desde la intra.',
+    })
+  }
+})
 
 app.post('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, true))
 app.delete('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, false))

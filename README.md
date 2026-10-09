@@ -49,8 +49,11 @@ El prototipo actual demuestra la idea central de Calendar42 mediante:
 - vista mensual;
 - vista diaria organizada por horas;
 - visualización de información temporal procedente de 42;
-- filtros para trabajar con las categorías del usuario: sus eventos, sus exámenes, sus slots y sus correcciones;
-- lista de eventos y exámenes disponibles (sin inscripción) junto al calendario, con nombre y franja horaria;
+- cuatro modos bajo el calendario: **Correcciones**, **Exámenes**, **Eventos** y **Crear slots**;
+- Correcciones: los proyectos del alumno aún sin terminar (solo los cerrados, pendientes de corrección, son seleccionables) y, para el elegido, los slots libres de otros estudiantes en el calendario y en las horas del día, desde donde se intenta reservar la corrección;
+- Exámenes: los exámenes disponibles que aún no han pasado; Eventos: los eventos pendientes del mes, con los inscritos marcados;
+- Crear slots: arrastrando sobre las horas del día se marca una franja y se crea el slot de corrección, en bloques de 15 minutos; un slot propio se puede borrar desde su ficha;
+- lo que la API no permite se indica junto al botón correspondiente con su motivo, y los errores de la intra se muestran en rojo en el mismo sitio;
 - ficha completa de cada elemento al pulsarlo, que ocupa el sitio de la vista del día (toda la pantalla en móvil) hasta cerrarla con su botón;
 - descripción de eventos y exámenes renderizada como Markdown, igual que en la intra;
 - aviso de slot libre u ocupado en la ficha, según el evento o examen se solape con lo que el estudiante ya tiene en su agenda;
@@ -144,6 +147,12 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 | `GET /v2/me/slots` | Slots de corrección del usuario | usuario |
 | `GET /v2/me/scale_teams` | Correcciones planificadas | usuario |
 | `GET /v2/projects/:id` | Nombre del proyecto de una corrección | usuario |
+| `GET /v2/users/:id/projects_users` | Proyectos del usuario y su estado (cerrado, en curso, finalizado) | usuario |
+| `POST /v2/slots` | Abrir un slot de corrección propio (la intra lo trocea en bloques de 15 min) | usuario |
+| `DELETE /v2/slots/:id` | Borrar un bloque de slot propio | usuario |
+| `GET /v2/projects/:id/slots` | Slots libres de otros estudiantes para corregir un proyecto | usuario |
+| `GET /v2/projects/:id/scales` | Escala de evaluación del proyecto, necesaria para reservar | usuario |
+| `POST /v2/scale_teams` | Reservar una corrección (puede estar reservado al personal) | usuario |
 
 ### Decisiones y dificultades técnicas
 
@@ -153,6 +162,8 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 - Los endpoints relacionados con slots y correcciones requieren el scope `projects`.
 - Apuntarse y borrarse de eventos (`/v2/events_users`) requiere el scope `profile`; sin él la intra responde `403 Insufficient scope`. Si la app OAuth no lo tenía activado, hay que activarlo en la intra y volver a iniciar sesión para que el token lo incluya.
 - La API no deja a un estudiante inscribirse ni borrarse de un examen (`/v2/exams_users`), así que en los exámenes el botón sale desactivado con ese motivo.
+- Los slots propios se crean con `POST /v2/slots` y se borran bloque a bloque con `DELETE /v2/slots/:id` (scope `projects`). La intra valida la franja (futuro, bloques de 15 min); sus motivos se muestran junto al botón.
+- Para reservar una corrección se consultan los slots libres del proyecto (`/v2/projects/:id/slots`) y se intenta crear el `scale_team` con la escala principal del proyecto y el corrector dueño del slot. Si la intra reserva esa acción al personal, el motivo aparece junto al botón.
 - La API tiene un límite de 2 peticiones por segundo. Las llamadas pasan por un limitador.
 - Para borrarse de un evento hace falta el id de la inscripción (`events_user`), no el del evento; se obtiene de `/v2/users/:id/events_users`. La intra valida aforo, fechas y plazo de cancelación: si rechaza la operación, la app muestra su motivo.
 - La agenda se cachea durante dos minutos por usuario y rango de fechas, y se invalida al apuntarse o borrarse de un evento.
@@ -203,6 +214,11 @@ Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejem
 | `GET /api/auth/me` | Usuario de la sesión |
 | `POST /api/auth/logout` | Cierra la sesión |
 | `GET /api/agenda?from&to` | Construye la agenda entre dos fechas ISO |
+| `GET /api/projects` | Proyectos del usuario en su cursus, con su estado |
+| `GET /api/projects/:id/slots?from&to` | Slots libres de otros estudiantes para corregir el proyecto |
+| `POST /api/corrections` | Reserva una corrección del proyecto en un instante |
+| `POST /api/slots` | Abre un slot de corrección propio entre dos instantes |
+| `DELETE /api/slots` | Borra los bloques de un slot propio |
 | `POST /api/events/:id/subscription` | Apunta al usuario al evento |
 | `DELETE /api/events/:id/subscription` | Borra al usuario del evento |
 
@@ -212,8 +228,9 @@ Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejem
 server/   Express: OAuth, sesiones y /api/agenda
           intra.js habla con la API de 42
 
-src/      React: Calendar, DayView, TypeFilter, AvailableList, ItemPopover,
-          LoginView; carga de la agenda y acciones sobre eventos en App.jsx
+src/      React: Calendar, ModeBar (los cuatro modos), ProjectPicker, ItemList,
+          SlotCreator, DayView (con arrastre para crear slots), ItemPopover,
+          LoginView; carga de datos y acciones sobre la intra en App.jsx
 ```
 
 ## Evolución del producto

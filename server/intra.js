@@ -119,10 +119,15 @@ function describeErrors(errors) {
 }
 
 /**
- * Petición genérica a la intra. `body` (objeto) se envía como JSON. Las
- * respuestas sin cuerpo (204, p. ej. al borrar) devuelven null.
+ * Petición genérica a la intra. `body` (objeto) se envía como JSON; `form`
+ * (objeto plano, claves estilo `recurso[campo]`) como formulario clásico.
+ * Las respuestas sin cuerpo (204, p. ej. al borrar) devuelven null.
  */
-export async function intraRequest(accessToken, path, { method = 'GET', params = {}, body } = {}) {
+export async function intraRequest(
+  accessToken,
+  path,
+  { method = 'GET', params = {}, body, form } = {},
+) {
   const url = new URL(`${INTRA_BASE}/v2${path}`)
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value)
@@ -131,6 +136,9 @@ export async function intraRequest(accessToken, path, { method = 'GET', params =
   if (body !== undefined) {
     options.headers['Content-Type'] = 'application/json'
     options.body = JSON.stringify(body)
+  } else if (form !== undefined) {
+    options.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    options.body = new URLSearchParams(form).toString()
   }
   const label = method === 'GET' ? path : `${method} ${path}`
   let res
@@ -155,8 +163,10 @@ export async function intraRequest(accessToken, path, { method = 'GET', params =
   if (!res.ok) {
     // La intra explica el motivo en el cuerpo (p. ej. "insufficient_scope").
     let reason = ''
+    let rawBody = ''
     try {
       const text = (await res.text()).trim()
+      rawBody = text.slice(0, 500)
       if (text.startsWith('<')) {
         reason = res.status === 404 ? 'ruta inexistente' : 'respuesta HTML'
       } else if (text) {
@@ -175,6 +185,7 @@ export async function intraRequest(accessToken, path, { method = 'GET', params =
     err.status = res.status
     err.path = path
     err.reason = reason
+    err.body = rawBody
     err.transient = res.status === 429 || res.status >= 500
     throw err
   }
@@ -182,25 +193,28 @@ export async function intraRequest(accessToken, path, { method = 'GET', params =
   return res.json()
 }
 
-/** Recorre todas las páginas de un listado filtrado por begin_at. */
-async function fetchAllInRange(accessToken, path, { from, to }, extraParams = {}) {
+/** Recorre todas las páginas de un listado. */
+async function fetchAllPages(accessToken, path, params = {}) {
   const items = []
-  let page = 1
-
-  while (true) {
+  for (let page = 1; ; page += 1) {
     const batch = await intraGet(accessToken, path, {
-      'range[begin_at]': `${from.toISOString()},${to.toISOString()}`,
+      ...params,
       'page[size]': PAGE_SIZE,
       'page[number]': page,
-      sort: 'begin_at',
-      ...extraParams,
     })
     items.push(...batch)
     if (batch.length < PAGE_SIZE) break
-    page += 1
   }
-
   return items
+}
+
+/** Recorre todas las páginas de un listado filtrado por begin_at. */
+function fetchAllInRange(accessToken, path, { from, to }, extraParams = {}) {
+  return fetchAllPages(accessToken, path, {
+    'range[begin_at]': `${from.toISOString()},${to.toISOString()}`,
+    sort: 'begin_at',
+    ...extraParams,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +232,8 @@ export async function fetchMe(accessToken) {
     displayName: me.displayname ?? me.login,
     image: me.image?.versions?.small ?? me.image?.link ?? null,
     campusId,
+    cursusId: cursus?.id ?? null,
+    cursusName: cursus?.name ?? null,
     coalition: await fetchMyCoalition(accessToken, me.id, { campusId, cursusId: cursus?.id ?? null }),
   }
 }
@@ -491,11 +507,28 @@ async function fetchEventOrNull(accessToken, eventId) {
  * `reason`. Devuelve el evento actualizado (o null si no se pudo releer).
  */
 export async function subscribeToEvent(accessToken, { eventId, userId }) {
-  await intraRequest(accessToken, '/events_users', {
-    method: 'POST',
-    body: { events_user: { event_id: eventId, user_id: userId } },
-  })
+  try {
+    await intraRequest(accessToken, '/events_users', {
+      method: 'POST',
+      body: { events_user: { event_id: eventId, user_id: userId } },
+    })
+  } catch (err) {
+    if (!isNotAuthorized(err)) throw err
+    // La intra comprueba permisos sobre el recurso que construye con los
+    // parámetros: si no hubiera leído el cuerpo JSON, denegaría igual. Antes de
+    // darlo por imposible, misma petición como formulario clásico.
+    console.warn(`[events] POST /events_users denegado (${err.status}): ${err.body}. Reintento como formulario.`)
+    await intraRequest(accessToken, '/events_users', {
+      method: 'POST',
+      form: { 'events_user[event_id]': eventId, 'events_user[user_id]': userId },
+    })
+  }
   return fetchEventOrNull(accessToken, eventId)
+}
+
+/** "You are not authorized to access this page": la intra deniega la acción a esta cuenta. */
+export function isNotAuthorized(err) {
+  return (err.status === 403 || err.status === 401) && /not authorized/i.test(String(err.reason))
 }
 
 /**
@@ -517,10 +550,147 @@ export async function unsubscribeFromEvent(accessToken, { eventId, userId }) {
   return fetchEventOrNull(accessToken, eventId)
 }
 
+// ---------------------------------------------------------------------------
+// Proyectos del usuario
+// ---------------------------------------------------------------------------
+
+// Id del 42cursus en la intra, para sesiones anteriores a guardar el cursus.
+const MAIN_CURSUS_ID = 21
+
+/**
+ * Normaliza un `projects_user` a { id, projectId, name, slug, status, closed,
+ * finalMark, validated, markedAt, updatedAt, teamId, occurrence }.
+ * `closed` es true cuando el equipo ha cerrado el proyecto y espera corrección
+ * (status `waiting_for_correction`): es el único estado en el que se puede
+ * agendar una corrección.
+ */
+export function normalizeProjectUser(raw) {
+  return {
+    id: raw.id,
+    projectId: raw.project?.id ?? null,
+    name: raw.project?.name ?? 'Proyecto',
+    slug: raw.project?.slug ?? null,
+    status: raw.status ?? 'unknown',
+    closed: raw.status === 'waiting_for_correction',
+    finalMark: raw.final_mark ?? null,
+    validated: raw['validated?'] ?? null,
+    markedAt: raw.marked_at ?? null,
+    updatedAt: raw.updated_at ?? null,
+    teamId: raw.current_team_id ?? null,
+    occurrence: raw.occurrence ?? 0,
+  }
+}
+
+/**
+ * Proyectos del usuario en su cursus (`/users/:id/projects_users`), sin los
+ * "padre" (contenedores de módulos), ordenados por nombre.
+ */
+export async function fetchMyProjects(accessToken, { userId, cursusId }) {
+  const raw = await fetchAllPages(accessToken, `/users/${userId}/projects_users`)
+  const wanted = cursusId ?? (raw.some((pu) => pu.cursus_ids?.includes(MAIN_CURSUS_ID)) ? MAIN_CURSUS_ID : null)
+  return raw
+    .filter((pu) => pu.project && pu.status !== 'parent')
+    .filter((pu) => wanted == null || (pu.cursus_ids ?? []).includes(wanted))
+    .map(normalizeProjectUser)
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+}
+
 /** Slots de corrección abiertos del usuario en [from, to). Requiere scope `projects`. */
 export async function fetchMyOpenSlots(accessToken, { from, to }) {
   const raw = await fetchAllInRange(accessToken, '/me/slots', { from, to })
   return normalizeOpenSlots(raw)
+}
+
+// ---------------------------------------------------------------------------
+// Slots propios: crear y borrar
+// ---------------------------------------------------------------------------
+
+/**
+ * Abre un slot de corrección del usuario entre dos instantes (ISO). La intra
+ * lo trocea en bloques de 15 min y devuelve esos bloques; los fusionamos como
+ * en la agenda. Requiere scope `projects`.
+ */
+export async function createSlot(accessToken, { userId, beginAt, endAt }) {
+  const raw = await intraRequest(accessToken, '/slots', {
+    method: 'POST',
+    body: { slot: { user_id: userId, begin_at: beginAt, end_at: endAt } },
+  })
+  return normalizeOpenSlots(Array.isArray(raw) ? raw : raw ? [raw] : [])
+}
+
+/** Borra bloques de slot propios, uno a uno (la intra no admite borrado múltiple). */
+export async function deleteSlots(accessToken, ids) {
+  for (const id of ids) {
+    await intraRequest(accessToken, `/slots/${id}`, { method: 'DELETE' })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Correcciones: slots libres de un proyecto y reserva
+// ---------------------------------------------------------------------------
+
+/**
+ * Fusiona los bloques libres de 15 min de otros estudiantes en franjas por
+ * corrector: { id, type: 'free', name, beginAt, endAt, slotIds, corrector }.
+ */
+export function normalizeFreeSlots(rawSlots) {
+  const free = rawSlots
+    .filter((s) => s.scale_team == null)
+    .sort((a, b) => a.begin_at.localeCompare(b.begin_at))
+
+  const byUser = new Map()
+  for (const s of free) {
+    const key = s.user?.id ?? 'anon'
+    if (!byUser.has(key)) byUser.set(key, [])
+    const blocks = byUser.get(key)
+    const last = blocks[blocks.length - 1]
+    if (last && last.end_at === s.begin_at) {
+      last.end_at = s.end_at
+      last.ids.push(s.id)
+    } else {
+      blocks.push({ begin_at: s.begin_at, end_at: s.end_at, ids: [s.id], user: s.user ?? null })
+    }
+  }
+
+  return [...byUser.values()]
+    .flat()
+    .sort((a, b) => a.begin_at.localeCompare(b.begin_at))
+    .map((b) => ({
+      id: `free-${b.ids[0]}`,
+      type: 'free',
+      kind: 'free',
+      name: b.user?.login ? `Slot libre · ${b.user.login}` : 'Slot libre para corrección',
+      description: `Un estudiante puede corregirte en esta franja (${b.ids.length} × 15 min).`,
+      location: '',
+      beginAt: b.begin_at,
+      endAt: b.end_at,
+      slotIds: b.ids,
+      corrector: b.user ? { id: b.user.id, login: b.user.login ?? null } : null,
+    }))
+}
+
+/** Slots libres para corregir un proyecto en [from, to). Requiere scope `projects`. */
+export async function fetchProjectSlots(accessToken, { projectId, from, to }) {
+  const raw = await fetchAllInRange(accessToken, `/projects/${projectId}/slots`, { from, to })
+  return normalizeFreeSlots(raw)
+}
+
+/**
+ * Reserva una corrección: crea un `scale_team` con la escala principal del
+ * proyecto, el equipo del usuario y, si se conoce, el corrector dueño del
+ * slot. La intra valida disponibilidad y permisos; sus motivos llegan en
+ * `reason` (y, si no autoriza a los estudiantes, en "not authorized").
+ */
+export async function bookCorrection(accessToken, { projectId, teamId, beginAt, correctorId }) {
+  const scales = await intraGet(accessToken, `/projects/${projectId}/scales`)
+  const list = Array.isArray(scales) ? scales : []
+  const scale = list.find((s) => s.is_primary) ?? list[0]
+  if (!scale) {
+    throw Object.assign(new Error('El proyecto no tiene escala de evaluación en la intra'), { status: 404 })
+  }
+  const scaleTeam = { begin_at: beginAt, team_id: teamId, scale_id: scale.id }
+  if (correctorId) scaleTeam.user_id = correctorId
+  return intraRequest(accessToken, '/scale_teams', { method: 'POST', body: { scale_team: scaleTeam } })
 }
 
 // Nombres de proyecto cacheados en memoria (cambian muy poco).

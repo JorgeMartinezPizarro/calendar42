@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TYPE_COLORS } from '../agendaTypes.js'
+import { MIN_SLOT_MINUTES } from '../subscription.js'
 import { formatRange, formatTime } from '../utils/date.js'
 import Markdown from './Markdown.jsx'
 import './ItemPopover.css'
@@ -9,6 +10,7 @@ const TYPE_LABELS = {
   exam: 'Examen',
   slot: 'Slot de corrección',
   correction: 'Corrección',
+  free: 'Slot libre para corrección',
 }
 
 // Subtipos de evento de la intra.
@@ -41,17 +43,44 @@ function capacity(item) {
 }
 
 /**
- * Ficha con el contenido completo de un elemento de la agenda y, si es un
- * evento, el botón para apuntarse o borrarse. Llena el panel que le reserva la
- * vista del día (a la derecha de las horas; a pantalla completa en móvil) y se
- * cierra con su botón o con Escape.
- * - subscription: resultado de subscriptionState(item), o null si no aplica
- * - conflicts: lo del usuario que se solapa con el elemento (ver
- *   overlappingItems); null si no procede mostrar "slot libre / ocupado"
+ * Horas de inicio posibles para una corrección dentro de una franja libre:
+ * cada 15 min, dejando al menos la duración mínima hasta el final.
+ */
+function startOptions(item) {
+  const step = 15 * 60_000
+  const begin = item.beginAt.getTime()
+  const last = Math.max(begin, item.endAt.getTime() - MIN_SLOT_MINUTES * 60_000)
+  const options = []
+  for (let t = begin; t <= last; t += step) options.push(new Date(t))
+  return options
+}
+
+/**
+ * Ficha con el contenido completo de un elemento de la agenda y su acción:
+ * apuntarse o borrarse (evento, examen), agendar una corrección (franja libre)
+ * o borrar un slot propio. Llena el panel que le reserva la vista del día (a
+ * pantalla completa en móvil) y se cierra con su botón o con Escape.
+ * - subscription: subscriptionState(item), o null si no aplica
+ * - booking: { project, state: bookingState(...) } para franjas libres, o null
+ * - slotDelete: slotDeleteState(item) para slots propios, o null
+ * - conflicts: lo del usuario que se solapa (ver overlappingItems); null si no procede
  * - action: { busy, error } del envío en curso para este elemento, si lo hay
  */
-function ItemPopover({ item, subscription, conflicts = null, action, onToggleSubscription, onClose }) {
+function ItemPopover({
+  item,
+  subscription = null,
+  booking = null,
+  slotDelete = null,
+  conflicts = null,
+  action,
+  onToggleSubscription,
+  onBook,
+  onDeleteSlot,
+  onClose,
+}) {
   const ref = useRef(null)
+  const starts = useMemo(() => (item.type === 'free' ? startOptions(item) : []), [item])
+  const [startAt, setStartAt] = useState(() => item.beginAt)
 
   // Al abrir (o cambiar de elemento) el foco pasa a la ficha: así Escape y el
   // teclado funcionan sin más, y en móvil la pantalla completa arranca arriba.
@@ -60,7 +89,8 @@ function ItemPopover({ item, subscription, conflicts = null, action, onToggleSub
     if (!el) return
     el.scrollTop = 0
     el.focus({ preventScroll: true })
-  }, [item.id])
+    setStartAt(item.beginAt)
+  }, [item.id, item.beginAt])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -74,6 +104,18 @@ function ItemPopover({ item, subscription, conflicts = null, action, onToggleSub
   const cap = capacity(item)
   const busy = Boolean(action?.busy)
   const slotBusy = Boolean(conflicts?.length)
+  const hasActions = Boolean(subscription || booking || slotDelete || conflicts)
+
+  const feedback = (reason) => (
+    <>
+      {reason && !action?.error && <span className="popover__reason">{reason}</span>}
+      {action?.error && (
+        <span className="popover__error" role="alert">
+          {action.error}
+        </span>
+      )}
+    </>
+  )
 
   return (
     <div
@@ -109,11 +151,17 @@ function ItemPopover({ item, subscription, conflicts = null, action, onToggleSub
             <dd>{cap}</dd>
           </>
         )}
+        {item.corrector?.login && (
+          <>
+            <dt>Corrector</dt>
+            <dd>{item.corrector.login}</dd>
+          </>
+        )}
       </dl>
 
       {item.description && <Markdown className="popover__description" text={item.description} />}
 
-      {(subscription || conflicts) && (
+      {hasActions && (
         <div className="popover__actions">
           {subscription && (
             <button
@@ -125,6 +173,51 @@ function ItemPopover({ item, subscription, conflicts = null, action, onToggleSub
               {busy ? 'Un momento…' : subscription.action === 'subscribe' ? 'Apuntarme' : 'Borrarme'}
             </button>
           )}
+
+          {booking && (
+            <>
+              {starts.length > 1 && (
+                <label className="popover__start">
+                  Empezar a las
+                  <select
+                    value={startAt.toISOString()}
+                    disabled={busy}
+                    onChange={(e) => setStartAt(new Date(e.target.value))}
+                  >
+                    {starts.map((d) => (
+                      <option key={d.toISOString()} value={d.toISOString()}>
+                        {formatTime(d)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <button
+                type="button"
+                className="popover__button"
+                disabled={!booking.state.enabled || busy}
+                onClick={() => onBook(item, startAt)}
+              >
+                {busy
+                  ? 'Un momento…'
+                  : booking.project?.closed
+                    ? `Agendar corrección de ${booking.project.name}`
+                    : 'Agendar corrección'}
+              </button>
+            </>
+          )}
+
+          {slotDelete && (
+            <button
+              type="button"
+              className="popover__button popover__button--unsubscribe"
+              disabled={!slotDelete.enabled || busy}
+              onClick={() => onDeleteSlot(item)}
+            >
+              {busy ? 'Un momento…' : 'Borrar slot'}
+            </button>
+          )}
+
           {conflicts && (
             <span
               className={`popover__slot popover__slot--${slotBusy ? 'busy' : 'free'}`}
@@ -137,14 +230,8 @@ function ItemPopover({ item, subscription, conflicts = null, action, onToggleSub
               {slotBusy ? 'Slot ocupado' : 'Slot libre'}
             </span>
           )}
-          {subscription?.reason && !action?.error && (
-            <span className="popover__reason">{subscription.reason}</span>
-          )}
-          {action?.error && (
-            <span className="popover__error" role="alert">
-              {action.error}
-            </span>
-          )}
+
+          {feedback(subscription?.reason ?? booking?.state.reason ?? slotDelete?.reason ?? null)}
         </div>
       )}
 
@@ -157,7 +244,6 @@ function ItemPopover({ item, subscription, conflicts = null, action, onToggleSub
           .
         </p>
       )}
-
     </div>
   )
 }

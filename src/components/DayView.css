@@ -3,6 +3,7 @@
   --dv-muted: rgba(128, 128, 128, 0.7);
   --dv-accent: #4f8cff;
   --dv-now: #ff5c5c;
+  --dv-slot: #20bf6b;
   --dv-hour-height: 3.5rem;
 
   display: flex;
@@ -34,6 +35,13 @@
   border-radius: 999px;
   background: var(--dv-accent);
   color: #fff;
+}
+
+/* Pista del modo "Crear slots". */
+.dayview__badge--hint {
+  background: transparent;
+  color: var(--dv-muted);
+  border: 1px dashed var(--dv-muted);
 }
 
 .dayview__count {
@@ -131,6 +139,18 @@
   background: color-mix(in srgb, var(--ev-color) 10%, transparent);
 }
 
+/* Franjas libres de otros estudiantes para corregir el proyecto elegido. */
+.dayview__event--free {
+  border: 2px dashed var(--ev-color);
+  border-left: 4px solid var(--ev-color);
+  background: color-mix(in srgb, var(--ev-color) 14%, transparent);
+}
+
+.dayview__event--free:hover,
+.dayview__event--free:focus-visible {
+  background: color-mix(in srgb, var(--ev-color) 28%, transparent);
+}
+
 /* Correcciones ya realizadas. */
 .dayview__event--done {
   opacity: 0.55;
@@ -162,6 +182,40 @@
 
 .dayview__hours {
   position: relative;
+}
+
+/* Modo "Crear slots": se arrastra sobre la rejilla para marcar la franja. */
+.dayview__hours--selectable {
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+/* Franja marcada (arrastrando o pendiente de crear). */
+.dayview__draft {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 0.25rem 0.5rem;
+  border: 2px dashed var(--dv-slot);
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(32, 191, 107, 0.3) 0 6px,
+    rgba(32, 191, 107, 0.1) 6px 12px
+  );
+  font-size: 0.8rem;
+  line-height: 1.25;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  pointer-events: none;
+}
+
+.dayview__draft span {
+  color: var(--dv-muted);
 }
 
 .dayview__hour {
