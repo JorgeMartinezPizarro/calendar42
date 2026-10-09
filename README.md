@@ -205,6 +205,21 @@ La aplicación estará disponible en:
 
 Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejemplo**.
 
+## Docker
+
+Para ejecutarlo como un solo servicio, con la API sirviendo también el frontend compilado, hay un `Dockerfile`, un `docker-compose.yml` y un `Makefile` con el ciclo de vida:
+
+```bash
+make build     # construye la imagen
+make start     # levanta el servicio en http://localhost:3000 (construye si hay cambios)
+make logs      # sigue los logs
+make stop      # para y elimina el contenedor
+```
+
+También `make restart`, `make status`, `make shell` y `make clean` (borra además la imagen y el volumen de sesiones). Sin `make`, los mismos comandos son `docker compose build`, `docker compose up -d --build`, `docker compose logs -f` y `docker compose down`.
+
+El contenedor lee las credenciales del mismo `.env`. Como todo va por el puerto 3000, el login de la intra vuelve a `http://localhost:3000/api/auth/callback`: registra también esa redirect URI en la app OAuth. Para publicarlo con otra URL, define `PUBLIC_URL` (y `PUBLIC_PORT` para el puerto del host) en `.env`. Las sesiones se guardan en el volumen `calendar42-data` y sobreviven a reinicios.
+
 ## API propia
 
 | Ruta | Descripción |
@@ -225,8 +240,11 @@ Sin credenciales, la aplicación puede arrancar en **modo demo con datos de ejem
 ## Estructura
 
 ```text
-server/   Express: OAuth, sesiones y /api/agenda
-          intra.js habla con la API de 42
+server/   Express: OAuth, sesiones y la API propia; en producción sirve
+          también dist/. intra.js habla con la API de 42
+
+Dockerfile, docker-compose.yml, Makefile
+          Imagen y ciclo de vida en Docker (make start | stop | logs | build)
 
 src/      React: Calendar, ModeBar (los cuatro modos), ProjectPicker, ItemList,
           SlotCreator, DayView (con arrastre para crear slots), ItemPopover,

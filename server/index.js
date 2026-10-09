@@ -1,6 +1,9 @@
 import 'dotenv/config'
 import express from 'express'
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   OAUTH_SCOPES,
   authorizeUrl,
@@ -42,6 +45,7 @@ import {
 
 const app = express()
 const PORT = Number(process.env.PORT) || 3000
+const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 const DEFAULT_CAMPUS_ID = Number(process.env.FT_CAMPUS_ID) || 22 // 42 Madrid
 const APP_URL = process.env.APP_URL || 'http://localhost:5173'
 
@@ -477,7 +481,21 @@ app.delete('/api/events/:id/subscription', requireSession, (req, res) => setSubs
 // Compatibilidad con el nombre anterior.
 app.get('/api/events', (req, res) => res.redirect(307, `/api/agenda${req.url.slice(req.path.length)}`))
 
+// ---------------------------------------------------------------------------
+// Frontend compilado (producción, p. ej. en Docker)
+// ---------------------------------------------------------------------------
+
+// Sin servidor de Vite delante, la API sirve también dist/ y devuelve
+// index.html para las rutas de página (sin extensión y fuera de /api/), como
+// pide una SPA; un fichero que no existe sigue dando 404.
+const servesFrontend = process.env.NODE_ENV === 'production' && existsSync(join(DIST_DIR, 'index.html'))
+if (servesFrontend) {
+  app.use(express.static(DIST_DIR, { index: false }))
+  app.get(/^(?!\/api\/)(?!.*\.[a-z0-9]+$).*/i, (_req, res) => res.sendFile(join(DIST_DIR, 'index.html')))
+}
+
 app.listen(PORT, () => {
   const mode = hasAppCredentials() ? 'OAuth con la intra' : 'sin credenciales, modo demo disponible'
-  console.log(`API escuchando en http://localhost:${PORT} (${mode})`)
+  const what = servesFrontend ? 'Calendar42 (API y frontend)' : 'API'
+  console.log(`${what} escuchando en http://localhost:${PORT} (${mode})`)
 })

@@ -1,0 +1,20 @@
+# Nada de esto entra en la imagen: ni dependencias locales, ni compilados, ni
+# secretos (.env y las sesiones se montan o se pasan por entorno).
+node_modules
+dist
+.env
+.env.*
+!.env.example
+server/.sessions.json
+.git
+.gitignore
+.gitattributes
+.claude
+.vscode
+.idea
+assets
+README.md
+Dockerfile
+docker-compose.yml
+Makefile
+*.log

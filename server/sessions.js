@@ -1,6 +1,7 @@
 // Sesiones identificadas por una cookie httpOnly.
-// Se guardan en memoria y se vuelcan a server/.sessions.json para sobrevivir a
-// los reinicios de `node --watch` en desarrollo. El fichero está en .gitignore.
+// Se guardan en memoria y se vuelcan a un fichero para sobrevivir a los
+// reinicios: server/.sessions.json en desarrollo (está en .gitignore) o el que
+// indique SESSIONS_FILE (en Docker, un volumen).
 
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -11,7 +12,8 @@ export const SESSION_COOKIE = 'c42_session'
 export const STATE_COOKIE = 'c42_oauth_state'
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const STORE_FILE = join(dirname(fileURLToPath(import.meta.url)), '.sessions.json')
+const STORE_FILE =
+  process.env.SESSIONS_FILE || join(dirname(fileURLToPath(import.meta.url)), '.sessions.json')
 
 const sessions = loadSessions() // id -> { user, tokens, demo, expiresAt }
 
@@ -47,10 +49,20 @@ export function parseCookies(header = '') {
   return out
 }
 
+/**
+ * La cookie solo lleva `Secure` cuando la app se sirve por https (APP_URL) o
+ * si COOKIE_SECURE lo fuerza: en Docker sobre http://localhost no debe
+ * llevarlo, o el navegador la descartaría.
+ */
+function cookieSecure() {
+  if (process.env.COOKIE_SECURE) return process.env.COOKIE_SECURE === '1'
+  return (process.env.APP_URL ?? '').startsWith('https://')
+}
+
 export function setCookie(res, name, value, { maxAgeMs } = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax']
   if (maxAgeMs !== undefined) parts.push(`Max-Age=${Math.floor(maxAgeMs / 1000)}`)
-  if (process.env.NODE_ENV === 'production') parts.push('Secure')
+  if (cookieSecure()) parts.push('Secure')
   res.append('Set-Cookie', parts.join('; '))
 }
 
