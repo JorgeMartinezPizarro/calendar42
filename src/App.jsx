@@ -20,7 +20,7 @@ import {
   slotDeleteState,
   subscriptionState,
 } from './subscription.js'
-import { getMonthGridRange, toDateKey } from './utils/date.js'
+import { addMonths, getMonthGridRange, toDateKey } from './utils/date.js'
 import './App.css'
 
 const EMPTY = []
@@ -31,6 +31,14 @@ const IDLE_ACTION = { busy: false, error: null, created: null }
 function monthKey(date) {
   return `${date.getFullYear()}-${date.getMonth()}`
 }
+
+/** Rango [start, end) de la rejilla del mes de una clave 'YYYY-M'. */
+function rangeOfKey(key) {
+  const [year, month] = key.split('-').map(Number)
+  return getMonthGridRange(year, month)
+}
+
+const byBegin = (a, b) => a.beginAt - b.beginAt
 
 /** Lee y limpia ?auth_error=... que deja el backend si falla el login. */
 function takeAuthErrorFromUrl() {
@@ -92,18 +100,36 @@ function App() {
   const currentKey = monthKey(viewDate)
   const loggedIn = auth.status === 'ready' && Boolean(auth.user)
 
+  // Meses que siempre tienen que estar cargados: el visible y, para las listas
+  // de próximos eventos y exámenes (de hoy a dentro de un mes), el de hoy y el
+  // siguiente.
+  const todayKey = monthKey(today)
+  const nextKey = monthKey(addMonths(today, 1))
+  const missingKeys = [...new Set([currentKey, todayKey, nextKey])].filter((k) => !agendaByMonth[k])
+  const missingList = missingKeys.join(',')
+
   useEffect(() => {
-    if (!loggedIn || agendaByMonth[currentKey]) return
+    if (!loggedIn || !missingList) return
 
     const controller = new AbortController()
-    const { start, end } = getMonthGridRange(viewDate.getFullYear(), viewDate.getMonth())
+    const keys = missingList.split(',')
 
     setStatus('loading')
     setError(null)
 
-    fetchAgenda(start, end, { signal: controller.signal })
-      .then(({ items, counts, warnings }) => {
-        setAgendaByMonth((prev) => ({ ...prev, [currentKey]: { items, counts, warnings } }))
+    Promise.all(
+      keys.map((key) => {
+        const { start, end } = rangeOfKey(key)
+        return fetchAgenda(start, end, { signal: controller.signal }).then((data) => [key, data])
+      }),
+    )
+      .then((entries) => {
+        setAgendaByMonth((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            entries.map(([key, { items, counts, warnings }]) => [key, { items, counts, warnings }]),
+          ),
+        }))
         setStatus('idle')
       })
       .catch((err) => {
@@ -117,10 +143,9 @@ function App() {
       })
 
     return () => controller.abort()
-  }, [loggedIn, currentKey, viewDate, agendaByMonth])
+  }, [loggedIn, missingList])
 
   const currentMonth = agendaByMonth[currentKey]
-  const monthItems = currentMonth?.items ?? EMPTY
 
   // Todo lo cargado, sin repetidos: las rejillas de dos meses seguidos
   // comparten días, así que un mismo elemento puede venir en ambos.
@@ -136,15 +161,33 @@ function App() {
   const visibleItems = useMemo(() => allItems.filter(isMine), [allItems])
 
   // Listas de los modos "Exámenes" (disponibles) y "Eventos" (todos, inscrito
-  // o no): solo los del mes visible que aún no han terminado.
-  const availableExams = useMemo(
-    () => monthItems.filter((it) => it.type === 'exam' && !it.subscribed && it.endAt > now),
-    [monthItems, now],
-  )
-  const upcomingEvents = useMemo(
-    () => monthItems.filter((it) => it.type === 'event' && it.endAt > now),
-    [monthItems, now],
-  )
+  // o no): lo que aún no ha terminado y empieza de hoy a dentro de un mes.
+  const upcomingEvents = useMemo(() => {
+    const limit = addMonths(now, 1)
+    limit.setDate(now.getDate())
+    return allItems
+      .filter((it) => it.type === 'event' && it.endAt > now && it.beginAt < limit)
+      .sort(byBegin)
+  }, [allItems, now])
+  const availableExams = useMemo(() => {
+    const limit = addMonths(now, 1)
+    limit.setDate(now.getDate())
+    return allItems
+      .filter((it) => it.type === 'exam' && !it.subscribed && it.endAt > now && it.beginAt < limit)
+      .sort(byBegin)
+  }, [allItems, now])
+
+  // Olvida los meses cargados cuya rejilla incluye esa fecha (tras crear o
+  // borrar algo ahí), para que el efecto de carga vuelva a pedirlos.
+  const forgetMonthsCovering = (date) =>
+    setAgendaByMonth((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).filter(([key]) => {
+          const { start, end } = rangeOfKey(key)
+          return !(date >= start && date < end)
+        }),
+      ),
+    )
 
   // Olvida el mes visible para que el efecto de carga vuelva a pedirlo.
   const retryMonth = () =>
@@ -342,7 +385,7 @@ function App() {
         delete next[freeKey]
         return next
       })
-      retryMonth()
+      forgetMonthsCovering(startAt)
     } catch (err) {
       if (err.status === 401) return backToLogin()
       endAction(item.id, err.message)
@@ -358,7 +401,7 @@ function App() {
       endAction(item.id)
       noteMode('slots', 'error', null)
       closeItem()
-      retryMonth()
+      forgetMonthsCovering(item.beginAt)
     } catch (err) {
       if (err.status === 401) return backToLogin()
       endAction(item.id, err.message)
@@ -389,7 +432,7 @@ function App() {
       setSlotAction({ busy: false, error: null, created: items[0] ?? pendingRange })
       setPendingRange(null)
       noteMode('slots', 'error', null)
-      retryMonth()
+      forgetMonthsCovering(pendingRange.beginAt)
     } catch (err) {
       if (err.status === 401) return backToLogin()
       setSlotAction({ busy: false, error: err.message, created: null })
@@ -516,7 +559,7 @@ function App() {
               title="Próximos exámenes"
               items={availableExams}
               status={status}
-              emptyText="Ningún examen disponible este mes"
+              emptyText="Ningún examen disponible en el próximo mes"
               openItemId={openItem?.id ?? null}
               onOpenItem={openItemCard}
             />
@@ -526,7 +569,7 @@ function App() {
               title="Próximos eventos"
               items={upcomingEvents}
               status={status}
-              emptyText="Ningún evento pendiente este mes"
+              emptyText="Ningún evento en el próximo mes"
               openItemId={openItem?.id ?? null}
               onOpenItem={openItemCard}
             />

@@ -558,8 +558,20 @@ export async function unsubscribeFromEvent(accessToken, { eventId, userId }) {
 const MAIN_CURSUS_ID = 21
 
 /**
+ * Los exámenes también son proyectos en la intra, pero no se corrigen: no
+ * pintan nada en "Correcciones". El proyecto embebido en `projects_users` no
+ * trae la marca `exam` del proyecto completo, así que se reconocen por el
+ * slug o el nombre, que la intra forma siempre con "exam" (`exam-rank-02`,
+ * `c-piscine-exam-00`).
+ */
+export function isExamProject(project) {
+  const text = `${project?.slug ?? ''} ${project?.name ?? ''}`.toLowerCase()
+  return /\bexam\b/.test(text)
+}
+
+/**
  * Normaliza un `projects_user` a { id, projectId, name, slug, status, closed,
- * finalMark, validated, markedAt, updatedAt, teamId, occurrence }.
+ * exam, finalMark, validated, markedAt, updatedAt, teamId, occurrence }.
  * `closed` es true cuando el equipo ha cerrado el proyecto y espera corrección
  * (status `waiting_for_correction`): es el único estado en el que se puede
  * agendar una corrección.
@@ -572,6 +584,7 @@ export function normalizeProjectUser(raw) {
     slug: raw.project?.slug ?? null,
     status: raw.status ?? 'unknown',
     closed: raw.status === 'waiting_for_correction',
+    exam: isExamProject(raw.project),
     finalMark: raw.final_mark ?? null,
     validated: raw['validated?'] ?? null,
     markedAt: raw.marked_at ?? null,
@@ -583,13 +596,13 @@ export function normalizeProjectUser(raw) {
 
 /**
  * Proyectos del usuario en su cursus (`/users/:id/projects_users`), sin los
- * "padre" (contenedores de módulos), ordenados por nombre.
+ * "padre" (contenedores de módulos) ni los exámenes, ordenados por nombre.
  */
 export async function fetchMyProjects(accessToken, { userId, cursusId }) {
   const raw = await fetchAllPages(accessToken, `/users/${userId}/projects_users`)
   const wanted = cursusId ?? (raw.some((pu) => pu.cursus_ids?.includes(MAIN_CURSUS_ID)) ? MAIN_CURSUS_ID : null)
   return raw
-    .filter((pu) => pu.project && pu.status !== 'parent')
+    .filter((pu) => pu.project && pu.status !== 'parent' && !isExamProject(pu.project))
     .filter((pu) => wanted == null || (pu.cursus_ids ?? []).includes(wanted))
     .map(normalizeProjectUser)
     .sort((a, b) => a.name.localeCompare(b.name, 'es'))

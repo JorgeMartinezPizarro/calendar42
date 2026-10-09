@@ -51,7 +51,7 @@ El prototipo actual demuestra la idea central de Calendar42 mediante:
 - visualización de información temporal procedente de 42;
 - cuatro modos bajo el calendario: **Correcciones**, **Exámenes**, **Eventos** y **Crear slots**;
 - Correcciones: los proyectos del alumno aún sin terminar (solo los cerrados, pendientes de corrección, son seleccionables) y, para el elegido, los slots libres de otros estudiantes en el calendario y en las horas del día, desde donde se intenta reservar la corrección;
-- Exámenes: los exámenes disponibles que aún no han pasado; Eventos: los eventos pendientes del mes, con los inscritos marcados;
+- Exámenes: los exámenes disponibles de hoy a dentro de un mes; Eventos: los eventos de hoy a dentro de un mes, con los inscritos marcados;
 - Crear slots: arrastrando sobre las horas del día se marca una franja y se crea el slot de corrección, en bloques de 15 minutos; un slot propio se puede borrar desde su ficha;
 - lo que la API no permite se indica junto al botón correspondiente con su motivo, y los errores de la intra se muestran en rojo en el mismo sitio;
 - ficha completa de cada elemento al pulsarlo, que ocupa el sitio de la vista del día (toda la pantalla en móvil) hasta cerrarla con su botón;
@@ -147,7 +147,7 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 | `GET /v2/me/slots` | Slots de corrección del usuario | usuario |
 | `GET /v2/me/scale_teams` | Correcciones planificadas | usuario |
 | `GET /v2/projects/:id` | Nombre del proyecto de una corrección | usuario |
-| `GET /v2/users/:id/projects_users` | Proyectos del usuario y su estado (cerrado, en curso, finalizado) | usuario |
+| `GET /v2/users/:id/projects_users` | Proyectos del usuario y su estado (cerrado, en curso, finalizado); los exámenes se descartan por su slug | usuario |
 | `POST /v2/slots` | Abrir un slot de corrección propio (la intra lo trocea en bloques de 15 min) | usuario |
 | `DELETE /v2/slots/:id` | Borrar un bloque de slot propio | usuario |
 | `GET /v2/projects/:id/slots` | Slots libres de otros estudiantes para corregir un proyecto | usuario |

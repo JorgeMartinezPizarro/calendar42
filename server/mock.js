@@ -34,18 +34,22 @@ const PROJECTS = [
   { id: 4, projectId: 1316, name: 'philosophers', status: 'finished', finalMark: 100, validated: true, teamId: 104 },
   { id: 5, projectId: 1283, name: 'push_swap', status: 'finished', finalMark: 84, validated: true, teamId: 105 },
   { id: 6, projectId: 1994, name: 'Born2beroot', status: 'finished', finalMark: 110, validated: true, teamId: 106 },
-  { id: 7, projectId: 2004, name: 'Exam Rank 02', status: 'finished', finalMark: 0, validated: false, teamId: 107 },
+  // Los exámenes también son proyectos en la intra, pero no se corrigen: el
+  // servidor los deja fuera, como hace con los de la intra.
+  { id: 7, projectId: 2004, name: 'Exam Rank 02', status: 'finished', finalMark: 0, validated: false, teamId: 107, exam: true },
+  { id: 8, projectId: 2005, name: 'Exam Rank 03', status: 'in_progress', finalMark: null, validated: null, teamId: 108, exam: true },
 ]
 
 export function mockProjects() {
   const now = new Date().toISOString()
-  return PROJECTS.map((p) => ({
+  return PROJECTS.filter((p) => !p.exam).map((p) => ({
     id: p.id,
     projectId: p.projectId,
     name: p.name,
     slug: p.name.toLowerCase().replace(/\s+/g, '-'),
     status: p.status,
     closed: p.status === 'waiting_for_correction',
+    exam: false,
     finalMark: p.finalMark,
     validated: p.validated,
     markedAt: p.status === 'finished' ? now : null,
