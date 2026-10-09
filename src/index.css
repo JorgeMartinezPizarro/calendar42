@@ -20,3 +20,56 @@ body {
     background-color: #ffffff;
   }
 }
+
+/* ---- desplegables -----------------------------------------------------------
+   Con el tema de la app, también la lista de opciones: si no, el navegador la
+   pinta con los colores del sistema (blanca). Flecha propia para que el
+   control se vea igual en todos los navegadores. */
+select {
+  --select-bg: #2b2f38;
+  --select-fg: rgba(255, 255, 255, 0.87);
+  --select-muted: rgba(255, 255, 255, 0.4);
+  --select-group: rgba(255, 255, 255, 0.55);
+  --select-checked: #3a4152;
+
+  color-scheme: dark;
+  appearance: none;
+  background-color: var(--select-bg);
+  color: var(--select-fg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23aab2c0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 0.7rem;
+}
+
+select option,
+select optgroup {
+  background-color: var(--select-bg);
+  color: var(--select-fg);
+}
+
+select optgroup {
+  color: var(--select-group);
+  font-style: normal;
+  font-weight: 600;
+}
+
+select option:disabled {
+  color: var(--select-muted);
+}
+
+select option:checked {
+  background-color: var(--select-checked);
+}
+
+@media (prefers-color-scheme: light) {
+  select {
+    --select-bg: #ffffff;
+    --select-fg: #213547;
+    --select-muted: rgba(33, 53, 71, 0.4);
+    --select-group: rgba(33, 53, 71, 0.6);
+    --select-checked: #e3ebff;
+
+    color-scheme: light;
+  }
+}

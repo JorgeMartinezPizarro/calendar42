@@ -41,8 +41,36 @@
 /* Pista del modo "Crear slots": línea propia bajo el título. */
 .dayview__hint {
   flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   font-size: 0.75rem;
   color: var(--dv-muted);
+}
+
+.dayview__hint > span {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Salir de la creación de slots. */
+.dayview__cancel {
+  flex: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: inherit;
+  min-height: 2rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--dv-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dayview__cancel:hover {
+  border-color: #ff5c5c;
+  color: #ff5c5c;
 }
 
 /* Título largo en escritorio, corto en móvil. */
@@ -65,6 +93,12 @@
 .dayview__back {
   font-size: 0.85rem;
   padding: 0.4rem 0.6rem;
+}
+
+/* Volver al mes y pie con el panel de crear slot: solo en móvil (ver abajo). */
+.dayview__back,
+.dayview__footer {
+  display: none;
 }
 
 .dayview__nav {
@@ -404,7 +438,12 @@
   }
 
   .dayview__back {
+    display: inline-block;
     min-height: 2.5rem;
+  }
+
+  .dayview__footer {
+    display: block;
   }
 
   .dayview__hour {

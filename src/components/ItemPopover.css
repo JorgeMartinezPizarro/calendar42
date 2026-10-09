@@ -161,11 +161,10 @@
 
 .popover__start select {
   font: inherit;
-  color: inherit;
-  padding: 0.3rem 0.45rem;
+  padding: 0.3rem 1.8rem 0.3rem 0.45rem;
   border: 1px solid var(--pv-border);
   border-radius: 6px;
-  background: transparent;
+  cursor: pointer;
 }
 
 /* "Slot libre / ocupado": si el elemento se solapa con algo del usuario. */
@@ -262,4 +261,9 @@
   .popover {
     animation: none;
   }
+}
+
+/* El scroll de la ficha no se transmite a la página al llegar al final. */
+.popover {
+  overscroll-behavior: contain;
 }

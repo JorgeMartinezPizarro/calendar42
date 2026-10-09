@@ -5,12 +5,11 @@ import './SlotCreator.css'
 /**
  * Modo "Crear slots": instrucciones, la franja marcada en las horas del día
  * (pending: { beginAt, endAt } o null), su ajuste fino y el botón para crearla.
- * - touch: puntero táctil (se marca con un toque, no arrastrando)
  * - onAdjust(edge, minutos): mueve el inicio ('start') o el fin ('end')
  * - action: { busy, error, created } del último envío; el error se pinta en
  *   rojo junto al botón, y lo que no procede (motivo) en naranja.
  */
-function SlotCreator({ pending, action, now, touch = false, onCreate, onCancel, onAdjust }) {
+function SlotCreator({ pending, action, now, onCreate, onCancel, onAdjust }) {
   const state = pending ? slotCreateState(pending, now) : null
 
   const stepper = (edge, label, time) => (
@@ -42,10 +41,9 @@ function SlotCreator({ pending, action, now, touch = false, onCreate, onCancel, 
 
       {!pending && (
         <p className="slotcreator__hint">
-          {touch
-            ? 'Elige un día y toca la hora en la que puedes corregir; luego ajusta la franja con los tiradores o con los botones de 15 minutos.'
-            : 'Arrastra sobre las horas del día para marcar cuándo puedes corregir.'}{' '}
-          Los slots van en bloques de 15 minutos y duran al menos {MIN_SLOT_MINUTES}.
+          Elige un día y marca cuándo puedes corregir: arrastrando sobre las horas con el ratón o
+          tocando una hora con el dedo. Luego ajusta la franja con los tiradores o con los botones
+          de 15 minutos. Los slots van en bloques de 15 minutos y duran al menos {MIN_SLOT_MINUTES}.
         </p>
       )}
 

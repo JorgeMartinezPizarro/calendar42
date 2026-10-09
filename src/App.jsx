@@ -13,7 +13,6 @@ import { fetchAgenda } from './api/agenda.js'
 import { fetchUpcomingEvents, setEventSubscription } from './api/events.js'
 import { fetchProjects } from './api/projects.js'
 import { bookCorrection, createSlot, deleteSlots, fetchProjectSlots } from './api/slots.js'
-import { MOBILE_QUERY, TOUCH_QUERY, useMediaQuery } from './hooks/useMediaQuery.js'
 import { useNow } from './hooks/useNow.js'
 import {
   MIN_SLOT_MINUTES,
@@ -318,13 +317,14 @@ function App() {
   // En pantallas estrechas no cabe todo apilado: la vista Mes lleva el
   // calendario, los modos y su panel; la vista Día, las horas a pantalla
   // completa. Tocar un día abre la vista Día; su botón "‹ Mes" vuelve.
-  const isMobile = useMediaQuery(MOBILE_QUERY)
-  const isTouch = useMediaQuery(TOUCH_QUERY)
+  // La app solo recuerda en qué vista está; qué se ve según el ancho lo decide
+  // únicamente el CSS (App.css), así nunca se desincronizan al girar la
+  // pantalla o cambiar el tamaño de la ventana.
   const [mobileView, setMobileView] = useState('month')
 
   useEffect(() => {
-    if (isMobile) window.scrollTo(0, 0)
-  }, [isMobile, mobileView])
+    window.scrollTo(0, 0)
+  }, [mobileView])
 
   // Elegir un día en el calendario cierra la ficha para enseñar ese día y, en
   // móvil, abre la vista Día (salvo con "Hoy", que solo vuelve al mes actual).
@@ -476,6 +476,15 @@ function App() {
     setPendingRange(null)
   }, [mode, selectedDate])
 
+  // Salir de la creación de slots sin crear nada: se descarta la franja y se
+  // vuelve a la vista de entrada (Mes, con Eventos).
+  const cancelSlotCreation = () => {
+    setPendingRange(null)
+    setSlotAction(IDLE_ACTION)
+    setMode('events')
+    setMobileView('month')
+  }
+
   // Ajuste fino de la franja marcada, en pasos de 15 min, sin salir del día y
   // respetando la duración mínima.
   const adjustPending = (edge, deltaMinutes) =>
@@ -555,7 +564,6 @@ function App() {
       pending={pendingRange}
       action={slotAction}
       now={now}
-      touch={isTouch}
       onCreate={createPendingSlot}
       onCancel={() => setPendingRange(null)}
       onAdjust={adjustPending}
@@ -565,7 +573,7 @@ function App() {
   const appClass = [
     'app',
     coalition && 'app--coalition',
-    isMobile && `app--mobile-${mobileView}`,
+    `app--view-${mobileView}`,
     panel && 'app--has-panel',
   ]
     .filter(Boolean)
@@ -677,12 +685,12 @@ function App() {
             openItemId={openItem?.id ?? null}
             onOpenItem={openItemCard}
             selectable={mode === 'slots'}
-            touchSelect={isTouch}
             draft={mode === 'slots' ? pendingRange : null}
             onRangeSelect={selectRange}
             onShiftDay={shiftDay}
-            onBack={isMobile ? () => setMobileView('month') : undefined}
-            footer={isMobile && mode === 'slots' ? slotCreator : null}
+            onBack={() => setMobileView('month')}
+            onCancelSelect={cancelSlotCreation}
+            footer={mode === 'slots' ? slotCreator : null}
           />
         </section>
       </main>

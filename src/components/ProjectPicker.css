@@ -38,10 +38,10 @@
   font: inherit;
   font-size: 0.9rem;
   color: inherit;
-  padding: 0.45rem 0.6rem;
+  /* Fondo, colores y flecha: estilo común de los desplegables (index.css). */
+  padding: 0.45rem 2rem 0.45rem 0.6rem;
   border: 1px solid var(--pj-border);
   border-radius: 8px;
-  background: transparent;
   cursor: pointer;
 }
 
@@ -49,10 +49,6 @@
 .projects__select:focus-visible {
   border-color: var(--pj-accent);
   outline: none;
-}
-
-.projects__select option:disabled {
-  color: var(--pj-muted);
 }
 
 .projects__detail,

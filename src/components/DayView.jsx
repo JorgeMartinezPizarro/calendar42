@@ -97,14 +97,18 @@ function itemMeta(item) {
  *   la ficha ocupa su sitio (en móvil, toda la pantalla, por CSS).
  * - openItemId: id del elemento cuya ficha está abierta, para resaltarlo.
  * - onOpenItem(item): abrir la ficha (clic, Enter o Espacio).
- * - selectable: modo "Crear slots". Con ratón, arrastrar sobre las horas marca
- *   una franja (bloques de 15 min); con el dedo (touchSelect), un toque marca
- *   una hora y el resto de las horas sigue haciendo scroll. La franja marcada
+ * - selectable: modo "Crear slots". Cada gesto decide por su tipo de puntero:
+ *   con ratón, arrastrar sobre las horas marca una franja (bloques de 15 min);
+ *   con el dedo, un toque marca una hora y deslizar sigue haciendo scroll.
+ *   No depende de detectar el dispositivo. La franja marcada
  *   (draft) lleva tiradores arriba y abajo para ajustarla. Cada cambio llama a
  *   onRangeSelect({ beginAt, endAt }).
  * - onShiftDay(delta): flechas de día anterior y siguiente.
- * - onBack: en móvil, botón "‹ Mes" para volver al calendario.
- * - footer: contenido fijo bajo las horas (en móvil, el panel de crear slot).
+ * - onBack: botón "‹ Mes" para volver al calendario (el CSS solo lo muestra en móvil).
+ * - onCancelSelect: botón "Cancelar" junto a la instrucción de crear slots,
+ *   para salir de la creación sin crear nada.
+ * - footer: contenido fijo bajo las horas, el panel de crear slot (el CSS solo
+ *   lo muestra en móvil; en escritorio está en la columna izquierda).
  */
 function DayView({
   date,
@@ -114,11 +118,11 @@ function DayView({
   openItemId = null,
   onOpenItem,
   selectable = false,
-  touchSelect = false,
   draft = null,
   onRangeSelect,
   onShiftDay,
   onBack,
+  onCancelSelect,
   footer = null,
 }) {
   const now = useNow()
@@ -310,9 +314,12 @@ function DayView({
         )}
         {selectable && (
           <span className="dayview__hint">
-            {touchSelect
-              ? 'Toca una hora para crear un slot y ajústalo con los tiradores'
-              : 'Arrastra sobre las horas para crear un slot'}
+            <span>Arrastra con el ratón o toca una hora para crear un slot; ajústalo con los tiradores</span>
+            {onCancelSelect && (
+              <button type="button" className="dayview__cancel" onClick={onCancelSelect}>
+                Cancelar
+              </button>
+            )}
           </span>
         )}
       </header>
