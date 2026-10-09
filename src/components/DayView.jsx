@@ -9,6 +9,8 @@ const HOURS = Array.from({ length: 24 }, (_, h) => h)
 const DEFAULT_SCROLL_HOUR = 8
 const MINUTES_PER_DAY = 24 * 60
 const SNAP_MINUTES = 15
+// Por debajo de esta duración no caben dos líneas: nombre y hora van en una.
+const COMPACT_MINUTES = 45
 
 function pad(n) {
   return String(n).padStart(2, '0')
@@ -225,6 +227,7 @@ function DayView({
               const height = ((endMin - startMin) / MINUTES_PER_DAY) * 100
               const width = 100 / lanes
               const left = lane * width
+              const compact = endMin - startMin < COMPACT_MINUTES
 
               return (
                 <article
@@ -236,6 +239,7 @@ function DayView({
                     item.done && 'dayview__event--done',
                     item.subscribed && 'dayview__event--mine',
                     item.id === openItemId && 'dayview__event--open',
+                    compact && 'dayview__event--compact',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -259,7 +263,9 @@ function DayView({
                     )}
                     {item.name}
                   </strong>
-                  <span className="dayview__event-meta">{itemMeta(item)}</span>
+                  <span className="dayview__event-meta">
+                    {compact ? `${formatTime(item.beginAt)}–${formatTime(item.endAt)}` : itemMeta(item)}
+                  </span>
                 </article>
               )
             })}

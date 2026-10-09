@@ -151,9 +151,34 @@
   background: color-mix(in srgb, var(--ev-color) 28%, transparent);
 }
 
-/* Correcciones ya realizadas. */
+/* Elementos cortos (menos de 45 min): una sola línea, nombre y hora,
+   centrada en la altura del bloque. */
+.dayview__event--compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.dayview__event--compact .dayview__event-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.dayview__event--compact .dayview__event-meta {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Correcciones ya realizadas: atenuadas, pero legibles. */
 .dayview__event--done {
-  opacity: 0.55;
+  opacity: 0.7;
+}
+
+.dayview__event--done .dayview__event-name {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
 }
 
 /* Elementos en los que el usuario está inscrito: relleno más fuerte y marca. */
