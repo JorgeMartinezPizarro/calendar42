@@ -26,6 +26,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Aviso bajo el título (p. ej. lo que el demo permite y la intra real no). */
+.itemlist__note {
+  margin: 0 0 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-left: 3px solid #ff9f43;
+  border-radius: 4px;
+  background: rgba(255, 159, 67, 0.1);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #ff9f43;
+}
+
 .itemlist__empty {
   margin: 0;
   font-size: 0.85rem;

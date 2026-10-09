@@ -28,6 +28,23 @@ export async function fetchUpcomingEvents({ signal } = {}) {
 }
 
 /**
+ * Apunta (subscribed = true) o borra (false) al usuario de un examen. Solo
+ * funciona en el modo demo (ver server/index.js).
+ */
+export async function setExamSubscription(examId, subscribed) {
+  const res = await fetch(`/api/exams/${examId}/subscription`, {
+    method: subscribed ? 'POST' : 'DELETE',
+  })
+  const body = await readJson(res)
+  if (!res.ok) {
+    const err = new Error(body.error ?? `Error ${res.status}`)
+    err.status = res.status
+    throw err
+  }
+  return { subscribed: Boolean(body.subscribed), subscribers: body.subscribers ?? null }
+}
+
+/**
  * Apunta (subscribed = true) o borra (false) al usuario de un evento.
  * Devuelve { subscribed, subscribers }; subscribers es null si el backend no
  * pudo releer el evento tras la operación.

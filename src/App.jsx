@@ -10,7 +10,7 @@ import SlotCreator from './components/SlotCreator.jsx'
 import { AGENDA_TYPES, isMine } from './agendaTypes.js'
 import { fetchMe, logout } from './api/auth.js'
 import { fetchAgenda } from './api/agenda.js'
-import { fetchUpcomingEvents, setEventSubscription } from './api/events.js'
+import { fetchUpcomingEvents, setEventSubscription, setExamSubscription } from './api/events.js'
 import { fetchProjects } from './api/projects.js'
 import { bookCorrection, createSlot, deleteSlots, fetchProjectSlots } from './api/slots.js'
 import { useNow } from './hooks/useNow.js'
@@ -397,23 +397,28 @@ function App() {
     setUpcoming((prev) => ({ ...prev, items: apply(prev.items) }))
   }
 
-  // Apuntarse o borrarse de un evento. La ficha se queda abierta, actualizada.
+  // Apuntarse o borrarse de un evento (o de un examen, en el demo). La ficha
+  // se queda abierta, actualizada.
   const toggleSubscription = async (item) => {
     const subscribe = !item.subscribed
+    const modeKey = item.type === 'exam' ? 'exams' : 'events'
     startAction(item.id)
     try {
-      const result = await setEventSubscription(item.eventId, subscribe)
+      const result =
+        item.type === 'exam'
+          ? await setExamSubscription(item.examId, subscribe)
+          : await setEventSubscription(item.eventId, subscribe)
       patchItem(item.id, {
         subscribed: result.subscribed,
         subscribers:
           result.subscribers ?? Math.max(0, (item.subscribers ?? 0) + (result.subscribed ? 1 : -1)),
       })
       endAction(item.id)
-      noteMode('events', 'error', null)
+      noteMode(modeKey, 'error', null)
     } catch (err) {
       if (err.status === 401) return backToLogin()
       endAction(item.id, err.message)
-      if (err.status === 403) noteMode('events', 'reason', err.message)
+      if (err.status === 403) noteMode(modeKey, 'reason', err.message)
     }
   }
 
@@ -541,7 +546,7 @@ function App() {
   const panel = openItem && (
     <ItemPopover
       item={openItem}
-      subscription={subscriptionState(openItem, now, { scopeOk })}
+      subscription={subscriptionState(openItem, now, { scopeOk, demo: Boolean(auth.demo) })}
       booking={
         openItem.type === 'free'
           ? { project: selectedProject, state: bookingState(openItem, selectedProject, now) }
@@ -657,6 +662,11 @@ function App() {
           {mode === 'exams' && (
             <ItemList
               title="Próximos exámenes"
+              note={
+                auth.demo
+                  ? 'Demo: aquí puedes apuntarte a los exámenes. Con la intra real aún no se puede: está pendiente de que el staff de 42 autorice la aplicación.'
+                  : null
+              }
               items={availableExams}
               status={status}
               emptyText="Ningún examen disponible en el próximo mes"

@@ -19,6 +19,16 @@ export function mockCoalition() {
 // Viven en memoria: se pierden al reiniciar el servidor, como el resto del demo.
 const demoSubscriptions = new Map()
 
+// Igual para exámenes (id de examen -> inscrito). En la intra real un estudiante
+// no puede inscribirse por la API; en el demo sí, para enseñar cómo sería.
+const demoExamSubscriptions = new Map()
+
+/** Apunta o borra al usuario demo de un examen. */
+export function mockSetExamSubscription(examId, subscribed) {
+  demoExamSubscriptions.set(examId, subscribed)
+  return { subscribed }
+}
+
 /** Apunta o borra al usuario demo de un evento. */
 export function mockSetSubscription(eventId, subscribed) {
   demoSubscriptions.set(eventId, subscribed)
@@ -239,11 +249,13 @@ export function mockAgenda({ from, to }) {
     EXAMS.forEach((t, i) => {
       const begin = at(y, m, t.day, t.start)
       if (!inRange(begin, from, to)) return
+      const byDefault = i === 0
+      const subscribed = demoExamSubscriptions.get(base + i) ?? byDefault
       items.push({
         id: `exam-${base + i}`,
         examId: base + i,
         type: 'exam',
-        subscribed: i === 0,
+        subscribed,
         kind: 'exam',
         name: t.name,
         description: `Proyectos: ${t.projects.join(', ')}\nCursus: 42cursus`,
@@ -251,7 +263,7 @@ export function mockAgenda({ from, to }) {
         beginAt: begin.toISOString(),
         endAt: new Date(begin.getTime() + t.hours * 3_600_000).toISOString(),
         maxPeople: 60,
-        subscribers: 31,
+        subscribers: 31 + Number(subscribed) - Number(byDefault),
       })
     })
 

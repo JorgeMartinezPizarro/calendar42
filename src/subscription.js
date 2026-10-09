@@ -15,13 +15,17 @@ export const MIN_SLOT_MINUTES = 30
  * { action: 'subscribe' | 'unsubscribe', enabled, reason }. El botón se pinta
  * siempre; si `enabled` es false, desactivado y con `reason` al lado.
  * - scopeOk: false si el token de la sesión no tiene el scope "profile".
+ * - demo: en el modo demo los exámenes sí admiten inscripción, para enseñar
+ *   cómo sería cuando el staff autorice la aplicación.
  */
-export function subscriptionState(item, now = new Date(), { scopeOk = true } = {}) {
+export function subscriptionState(item, now = new Date(), { scopeOk = true, demo = false } = {}) {
   if (item.type !== 'event' && item.type !== 'exam') return null
   const action = item.subscribed ? 'unsubscribe' : 'subscribe'
   const blocked = (reason) => ({ action, enabled: false, reason })
 
-  if (item.type === 'exam') return blocked(EXAM_REASON)
+  const noun = item.type === 'exam' ? 'El examen' : 'El evento'
+
+  if (item.type === 'exam' && !demo) return blocked(EXAM_REASON)
   if (item.externalKind) {
     return blocked(
       item.signupUrl
@@ -29,9 +33,9 @@ export function subscriptionState(item, now = new Date(), { scopeOk = true } = {
         : 'Evento externo: la intra no gestiona su inscripción; busca el enlace en la descripción',
     )
   }
-  if (!scopeOk) return blocked(SCOPE_REASON)
-  if (item.endAt <= now) return blocked('El evento ya ha terminado')
-  if (item.beginAt <= now) return blocked('El evento ya ha empezado')
+  if (!scopeOk && item.type === 'event') return blocked(SCOPE_REASON)
+  if (item.endAt <= now) return blocked(`${noun} ya ha terminado`)
+  if (item.beginAt <= now) return blocked(`${noun} ya ha empezado`)
 
   if (item.subscribed) {
     const limit = item.cancellationLimitHours || 0

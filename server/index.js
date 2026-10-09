@@ -37,6 +37,7 @@ import {
   mockDeleteSlots,
   mockProjectSlots,
   mockProjects,
+  mockSetExamSubscription,
   mockSetSubscription,
 } from './mock.js'
 import {
@@ -470,6 +471,33 @@ app.post('/api/corrections', requireSession, async (req, res) => {
     })
   }
 })
+
+/**
+ * POST   /api/exams/:id/subscription  → apuntarse al examen
+ * DELETE /api/exams/:id/subscription  → borrarse del examen
+ * Solo en el modo demo: la intra no deja a un estudiante inscribirse a
+ * exámenes por la API mientras el staff no autorice la aplicación, así que con
+ * una sesión real responde 403 con ese motivo.
+ */
+async function setExamSubscription(req, res, subscribed) {
+  const examId = Number(req.params.id)
+  if (!Number.isInteger(examId) || examId <= 0) {
+    return res.status(400).json({ error: 'Id de examen inválido' })
+  }
+  const session = req.session
+  if (!session.demo) {
+    return res.status(403).json({
+      error:
+        'La API de la intra no deja inscribirse a exámenes con la cuenta de un estudiante; está pendiente de que el staff autorice la aplicación.',
+    })
+  }
+  mockSetExamSubscription(examId, subscribed)
+  forgetPersonal(session.user.id)
+  res.json({ ok: true, subscribed, subscribers: null })
+}
+
+app.post('/api/exams/:id/subscription', requireSession, (req, res) => setExamSubscription(req, res, true))
+app.delete('/api/exams/:id/subscription', requireSession, (req, res) => setExamSubscription(req, res, false))
 
 app.post('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, true))
 app.delete('/api/events/:id/subscription', requireSession, (req, res) => setSubscription(req, res, false))
