@@ -111,16 +111,17 @@ Conceptualización de la solución y definición del problema a partir de la exp
 
 ### `jomarti3`
 
-Desarrollo e implementación técnica del proyecto.
+Desarrollo, diseño, implementación técnica y despliegue del proyecto.
 
 - Implementación del frontend.
 - Implementación del backend.
 - Integración con la API de 42.
 - Implementación del sistema de autenticación.
 - Integración y tratamiento de la información necesaria para construir la agenda.
-- Puesta en funcionamiento del primer prototipo.
+- Diseño de la interfaz, en escritorio y en móvil.
+- Puesta en funcionamiento del primer prototipo y despliegue con Docker.
 
-**Dedicación: 10 horas.**
+**Dedicación: 20 horas.**
 
 ## Organización del proyecto
 
