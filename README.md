@@ -4,9 +4,19 @@
 
 La información que un estudiante necesita para organizar su tiempo ya existe en la intra, pero está distribuida entre diferentes apartados. Calendar42 nace para reunirla en una única experiencia de calendario y facilitar una visión global de cómo encajan las distintas actividades de 42.
 
-(Calendar42 live url)[https://calendar42.ideniox.com]
+<p align="center">
+  <a href="https://calendar42.ideniox.com"><strong>calendar42.ideniox.com</strong></a>
+  &nbsp;·&nbsp; con modo demo interactivo, sin necesidad de cuenta de 42
+</p>
 
-![Calendar42: vista mensual, vista diaria por horas, filtros por capas y coalición del usuario en la cabecera](assets/preview.png)
+<p align="center">
+  <a href="https://calendar42.ideniox.com">
+    <img src="assets/Escritorio.png" width="100%" alt="Calendar42 en escritorio: a la izquierda, el calendario del mes con marcas de color por tipo, los cuatro modos (Eventos, Correcciones, Exámenes y Crear slots) y la lista de próximos eventos; a la derecha, las horas del día elegido con una corrección">
+  </a>
+</p>
+<p align="center">
+  <sub>El mes, los modos y los próximos eventos a la izquierda; las horas del día elegido a la derecha.</sub>
+</p>
 
 ## El problema
 
@@ -30,6 +40,8 @@ El problema que Calendar42 intenta resolver es, por tanto, un problema de **gest
 
 ## La solución
 
+<img src="assets/Movil.png" align="right" width="230" alt="Calendar42 en el móvil: cabecera compacta, calendario del mes, los cuatro modos en dos filas y la lista de próximos eventos con los inscritos marcados">
+
 **Calendar42 reúne la información temporal de 42 en una única interfaz de calendario.**
 
 La propuesta se basa en una idea sencilla:
@@ -39,6 +51,10 @@ La propuesta se basa en una idea sencilla:
 El calendario permite trabajar visualmente con diferentes categorías de información para que el estudiante pueda entender su agenda sin tener que saltar constantemente entre diferentes apartados de la intra.
 
 El objetivo no es sustituir la intra, sino crear una **capa de planificación temporal** sobre ella.
+
+En el móvil, la misma información se reparte en dos vistas: el mes, con los modos y su lista, y el día, con las horas a pantalla completa.
+
+<br clear="right">
 
 ## Estado actual: primer prototipo funcional
 
