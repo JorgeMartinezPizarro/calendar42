@@ -61,7 +61,8 @@ function startOptions(item) {
  * o borrar un slot propio. Llena el panel que le reserva la vista del día (a
  * pantalla completa en móvil) y se cierra con su botón o con Escape.
  * - subscription: subscriptionState(item), o null si no aplica
- * - booking: { project, state: bookingState(...) } para franjas libres, o null
+ * - booking: { project, stateAt(startAt) } para franjas libres, o null. stateAt
+ *   da el estado de la reserva (bookingState) empezando a esa hora.
  * - slotDelete: slotDeleteState(item) para slots propios, o null
  * - conflicts: lo del usuario que se solapa (ver overlappingItems); null si no procede
  * - action: { busy, error } del envío en curso para este elemento, si lo hay
@@ -80,6 +81,10 @@ function ItemPopover({
 }) {
   const ref = useRef(null)
   const starts = useMemo(() => (item.type === 'free' ? startOptions(item) : []), [item])
+  // Por defecto, la primera hora de la franja que no choca con la agenda.
+  const firstFreeStart = booking
+    ? (starts.find((d) => !booking.stateAt(d).overlap) ?? item.beginAt)
+    : item.beginAt
   const [startAt, setStartAt] = useState(() => item.beginAt)
 
   // Al abrir (o cambiar de elemento) el foco pasa a la ficha: así Escape y el
@@ -89,7 +94,9 @@ function ItemPopover({
     if (!el) return
     el.scrollTop = 0
     el.focus({ preventScroll: true })
-    setStartAt(item.beginAt)
+    setStartAt(firstFreeStart)
+    // Solo al abrir otro elemento: no se pisa la hora que el usuario elija.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id, item.beginAt])
 
   useEffect(() => {
@@ -105,6 +112,7 @@ function ItemPopover({
   const busy = Boolean(action?.busy)
   const slotBusy = Boolean(conflicts?.length)
   const hasActions = Boolean(subscription || booking || slotDelete || conflicts || item.signupUrl)
+  const bookingNow = booking ? booking.stateAt(startAt) : null
 
   const feedback = (reason) => (
     <>
@@ -202,6 +210,7 @@ function ItemPopover({
                     {starts.map((d) => (
                       <option key={d.toISOString()} value={d.toISOString()}>
                         {formatTime(d)}
+                        {booking.stateAt(d).overlap ? ' · choca' : ''}
                       </option>
                     ))}
                   </select>
@@ -210,7 +219,7 @@ function ItemPopover({
               <button
                 type="button"
                 className="popover__button"
-                disabled={!booking.state.enabled || busy}
+                disabled={!bookingNow.enabled || busy}
                 onClick={() => onBook(item, startAt)}
               >
                 {busy
@@ -246,7 +255,7 @@ function ItemPopover({
             </span>
           )}
 
-          {feedback(subscription?.reason ?? booking?.state.reason ?? slotDelete?.reason ?? null)}
+          {feedback(subscription?.reason ?? bookingNow?.reason ?? slotDelete?.reason ?? null)}
         </div>
       )}
 

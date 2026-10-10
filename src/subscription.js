@@ -1,4 +1,5 @@
 import { isMine } from './agendaTypes.js'
+import { formatTime } from './utils/date.js'
 
 const EXAM_REASON =
   'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.'
@@ -9,6 +10,20 @@ const SCOPE_REASON =
 export const MIN_SLOT_MINUTES = 30
 
 /**
+ * Duración con la que se comprueba si una corrección que se va a agendar choca
+ * con la agenda. La de cada proyecto la fija su escala en la intra; media hora
+ * es la habitual.
+ */
+export const CORRECTION_MINUTES = 30
+
+/** "Se solapa con X (10:00–11:00)" con lo primero que choca, y cuántos más. */
+function overlapReason(conflicts) {
+  const [first, ...rest] = conflicts
+  const what = `${first.name} (${formatTime(first.beginAt)}–${formatTime(first.endAt)})`
+  return `Se solapa con ${what}${rest.length ? ` y ${rest.length} más` : ''}`
+}
+
+/**
  * Qué puede hacer el usuario con un evento o examen ahora mismo, según lo que
  * sabemos antes de preguntar a la intra (ella tiene la última palabra).
  * Devuelve null si el elemento no es un evento ni un examen; si no:
@@ -17,8 +32,14 @@ export const MIN_SLOT_MINUTES = 30
  * - scopeOk: false si el token de la sesión no tiene el scope "profile".
  * - demo: en el modo demo los exámenes sí admiten inscripción, para enseñar
  *   cómo sería cuando el staff autorice la aplicación.
+ * - conflicts: lo del usuario que se solapa con el elemento (overlappingItems).
+ *   Apuntarse a algo que choca no se permite; borrarse, sí.
  */
-export function subscriptionState(item, now = new Date(), { scopeOk = true, demo = false } = {}) {
+export function subscriptionState(
+  item,
+  now = new Date(),
+  { scopeOk = true, demo = false, conflicts = [] } = {},
+) {
   if (item.type !== 'event' && item.type !== 'exam') return null
   const action = item.subscribed ? 'unsubscribe' : 'subscribe'
   const blocked = (reason) => ({ action, enabled: false, reason })
@@ -42,6 +63,9 @@ export function subscriptionState(item, now = new Date(), { scopeOk = true, demo
     if (limit > 0 && item.beginAt - now < limit * 3_600_000) {
       return blocked(`La intra no permite borrarse a menos de ${limit} h del inicio`)
     }
+  } else if (conflicts.length) {
+    // El detalle de con qué choca ya va en la ficha, bajo los botones.
+    return blocked('No puedes apuntarte: se solapa con tu agenda')
   } else if (item.maxPeople > 0 && item.subscribers >= item.maxPeople) {
     return blocked('Aforo completo')
   }
@@ -51,17 +75,28 @@ export function subscriptionState(item, now = new Date(), { scopeOk = true, demo
 
 /**
  * Reservar una corrección en una franja libre de otro estudiante (type 'free')
- * para el proyecto elegido en "Correcciones" (un projects_user, o null).
- * Devuelve null si el elemento no es una franja libre; si no { enabled, reason }.
+ * para el proyecto elegido en "Correcciones" (un projects_user, o null),
+ * empezando a `startAt`. Devuelve null si el elemento no es una franja libre;
+ * si no { enabled, reason, overlap }.
+ * - items: la agenda; la corrección (CORRECTION_MINUTES desde startAt) no
+ *   puede pisar nada del usuario.
  */
-export function bookingState(item, project, now = new Date()) {
+export function bookingState(item, project, now = new Date(), { startAt = item.beginAt, items = [] } = {}) {
   if (item.type !== 'free') return null
-  const blocked = (reason) => ({ enabled: false, reason })
+  const blocked = (reason, overlap = false) => ({ enabled: false, reason, overlap })
   if (item.endAt <= now) return blocked('La franja ya ha pasado')
   if (!project) return blocked('Elige un proyecto cerrado en "Correcciones" para agendar su corrección')
   if (!project.closed) return blocked(`${project.name} aún no está cerrado: no se puede agendar su corrección`)
   if (!project.teamId) return blocked('La intra no indica el equipo del proyecto')
-  return { enabled: true, reason: null }
+  if (startAt <= now) return blocked('Esa hora ya ha pasado')
+  const range = {
+    id: item.id,
+    beginAt: startAt,
+    endAt: new Date(startAt.getTime() + CORRECTION_MINUTES * 60_000),
+  }
+  const conflicts = overlappingItems(range, items)
+  if (conflicts.length) return blocked(overlapReason(conflicts), true)
+  return { enabled: true, reason: null, overlap: false }
 }
 
 /** Borrar un slot propio (type 'slot'): solo si aún no ha empezado. */
@@ -71,13 +106,19 @@ export function slotDeleteState(item, now = new Date()) {
   return { enabled: true, reason: null }
 }
 
-/** Crear un slot propio en una franja { beginAt, endAt } marcada en las horas. */
-export function slotCreateState(range, now = new Date()) {
+/**
+ * Crear un slot propio en una franja { beginAt, endAt } marcada en las horas.
+ * - items: la agenda; el slot no puede pisar otro slot propio, una corrección
+ *   ni nada a lo que el usuario esté apuntado.
+ */
+export function slotCreateState(range, now = new Date(), items = []) {
   const blocked = (reason) => ({ enabled: false, reason })
   if (range.beginAt <= now) return blocked('El slot debe empezar en el futuro')
   if (range.endAt - range.beginAt < MIN_SLOT_MINUTES * 60_000) {
     return blocked(`El slot debe durar al menos ${MIN_SLOT_MINUTES} minutos`)
   }
+  const conflicts = overlappingItems({ id: 'nuevo-slot', ...range }, items)
+  if (conflicts.length) return blocked(overlapReason(conflicts))
   return { enabled: true, reason: null }
 }
 

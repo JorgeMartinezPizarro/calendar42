@@ -29,6 +29,8 @@ const NO_PROJECTS = { status: 'idle', items: EMPTY, error: null }
 const NO_UPCOMING = { status: 'idle', items: EMPTY, error: null }
 const LOADING = { status: 'loading', items: EMPTY, error: null }
 const IDLE_ACTION = { busy: false, error: null, created: null }
+// Tiempo que se ve el aviso "Slot creado" antes de irse solo.
+const SLOT_CREATED_NOTICE_MS = 5000
 
 function monthKey(date) {
   return `${date.getFullYear()}-${date.getMonth()}`
@@ -479,10 +481,19 @@ function App() {
     setOpenId(null)
   }, [])
 
-  // Cambiar de modo o de día descarta la franja marcada.
+  // Cambiar de modo, de día o abrir una ficha descarta la franja marcada y el
+  // aviso de "Slot creado": son de la operación anterior.
   useEffect(() => {
     setPendingRange(null)
-  }, [mode, selectedDate])
+    setSlotAction(IDLE_ACTION)
+  }, [mode, selectedDate, openId])
+
+  // El aviso de "Slot creado" se va solo al cabo de unos segundos.
+  useEffect(() => {
+    if (!slotAction.created) return
+    const timer = setTimeout(() => setSlotAction(IDLE_ACTION), SLOT_CREATED_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [slotAction.created])
 
   // Salir de la creación de slots sin crear nada: se descarta la franja y se
   // vuelve a la vista de entrada (Mes, con Eventos).
@@ -549,10 +560,19 @@ function App() {
   const panel = openItem && (
     <ItemPopover
       item={openItem}
-      subscription={subscriptionState(openItem, now, { scopeOk, demo: Boolean(auth.demo) })}
+      subscription={subscriptionState(openItem, now, {
+        scopeOk,
+        demo: Boolean(auth.demo),
+        conflicts: conflicts ?? [],
+      })}
       booking={
         openItem.type === 'free'
-          ? { project: selectedProject, state: bookingState(openItem, selectedProject, now) }
+          ? {
+              project: selectedProject,
+              // Estado para cada hora de inicio posible dentro de la franja.
+              stateAt: (startAt) =>
+                bookingState(openItem, selectedProject, now, { startAt, items: allItems }),
+            }
           : null
       }
       slotDelete={slotDeleteState(openItem, now)}
@@ -572,6 +592,7 @@ function App() {
       pending={pendingRange}
       action={slotAction}
       now={now}
+      items={allItems}
       onCreate={createPendingSlot}
       onCancel={() => setPendingRange(null)}
       onAdjust={adjustPending}

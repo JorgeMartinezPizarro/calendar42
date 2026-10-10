@@ -34,6 +34,7 @@ import {
   mockBookCorrection,
   mockCoalition,
   mockCreateSlot,
+  mockOverlaps,
   mockDeleteSlots,
   mockProjectSlots,
   mockProjects,
@@ -107,6 +108,15 @@ function sessionExpired(req, res) {
   destroySession(req.sessionId)
   clearCookie(res, SESSION_COOKIE)
   return res.status(401).json({ error: 'La sesión ha caducado, vuelve a iniciar sesión' })
+}
+
+/** 409 si lo que se va a añadir a la agenda demo pisa algo que ya está. */
+function rejectDemoOverlap(res, session, begin, end) {
+  const overlaps = mockOverlaps(demoStateOf(session), begin, end)
+  if (!overlaps.length) return false
+  const names = overlaps.map((it) => it.name).join(', ')
+  res.status(409).json({ error: `Se solapa con ${names}` })
+  return true
 }
 
 /**
@@ -382,6 +392,7 @@ app.post('/api/slots', requireSession, async (req, res) => {
   try {
     let items
     if (session.demo) {
+      if (rejectDemoOverlap(res, session, begin, end)) return
       items = mockCreateSlot(demoStateOf(session), { begin, end })
       saveSession()
     } else {
@@ -468,6 +479,7 @@ app.post('/api/corrections', requireSession, async (req, res) => {
   try {
     let item = null
     if (session.demo) {
+      if (rejectDemoOverlap(res, session, begin, new Date(begin.getTime() + 30 * 60_000))) return
       item = mockBookCorrection(demoStateOf(session), { projectId, beginAt: begin })
       saveSession()
     } else {

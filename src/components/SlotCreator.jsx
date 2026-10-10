@@ -5,12 +5,13 @@ import './SlotCreator.css'
 /**
  * Modo "Crear slots": instrucciones, la franja marcada en las horas del día
  * (pending: { beginAt, endAt } o null), su ajuste fino y el botón para crearla.
+ * - items: la agenda, para no crear un slot que pise lo que ya hay
  * - onAdjust(edge, minutos): mueve el inicio ('start') o el fin ('end')
  * - action: { busy, error, created } del último envío; el error se pinta en
  *   rojo junto al botón, y lo que no procede (motivo) en naranja.
  */
-function SlotCreator({ pending, action, now, onCreate, onCancel, onAdjust }) {
-  const state = pending ? slotCreateState(pending, now) : null
+function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onAdjust }) {
+  const state = pending ? slotCreateState(pending, now, items) : null
 
   const stepper = (edge, label, time) => (
     <span className="slotcreator__step">

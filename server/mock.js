@@ -82,6 +82,24 @@ export function mockProjects() {
   }))
 }
 
+/**
+ * Lo del usuario demo que se solapa con [begin, end): sus slots, sus
+ * correcciones y aquello a lo que está apuntado. Vacío si no choca nada.
+ */
+export function mockOverlaps(state, begin, end) {
+  const day = 86_400_000
+  const { items } = mockAgenda(state, {
+    from: new Date(begin.getTime() - day),
+    to: new Date(end.getTime() + day),
+  })
+  return items.filter(
+    (it) =>
+      (it.type === 'slot' || it.type === 'correction' || it.subscribed) &&
+      new Date(it.beginAt) < end &&
+      new Date(it.endAt) > begin,
+  )
+}
+
 /** Abre un slot propio entre dos fechas; lo devuelve ya fusionado. */
 export function mockCreateSlot(state, { begin, end }) {
   const chunks = Math.max(1, Math.round((end - begin) / 900_000))
