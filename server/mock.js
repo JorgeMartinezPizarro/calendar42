@@ -115,8 +115,12 @@ const FREE_SLOTS = [
 export function mockProjectSlots({ projectId, from, to }) {
   const items = []
   const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
+  const seen = new Set() // corrector + inicio: sin franjas repetidas
   const push = (begin, hours, login, key) => {
     if (!inRange(begin, from, to)) return
+    const id = `${login}@${begin.toISOString()}`
+    if (seen.has(id)) return
+    seen.add(id)
     const chunks = Math.round((hours * 60) / 15)
     items.push({
       id: `free-${key}`,

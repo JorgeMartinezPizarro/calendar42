@@ -276,26 +276,6 @@ Más adelante podría estudiarse una integración bidireccional, siempre mediant
 
 **Esta línea todavía requiere estudio y validación técnica.**
 
-### 3. Peer-to-peer incentivado
-
-Otra posible evolución parte de los propios slots de corrección.
-
-La propuesta sería:
-
-> **ofrecer tiempo a la comunidad → ayudar a otro estudiante → recibir un beneficio.**
-
-El tipo de beneficio dependería de las posibilidades y criterios de 42 Madrid. Podría plantearse mediante horas o días adicionales, Altaris, reconocimiento u otros incentivos.
-
-**Esta línea todavía requiere estudio y validación técnica y no forma parte del prototipo actual.**
-
-### 4. Presencialidad y comunidad
-
-La misma lógica podría utilizarse para favorecer la asistencia a los clústers y la participación en actividades presenciales.
-
-Calendar42 podría evolucionar desde una herramienta de planificación hacia una capa que también ayude a **organizar el tiempo, favorecer la colaboración y reforzar la comunidad presencial**.
-
-**Esta línea todavía requiere estudio y validación técnica y no forma parte del prototipo actual.**
-
 ## Visión
 
 Calendar42 empieza resolviendo un problema sencillo:
@@ -308,14 +288,11 @@ La primera respuesta es reunirla:
 
 El siguiente paso es convertir esa visión en una herramienta con la que el estudiante pueda no solo **ver** lo que ocurre en 42, sino también **organizar y gestionar** mejor su tiempo.
 
-A largo plazo, la visión es construir una capa de planificación que conecte la actividad de 42 con las decisiones reales que toma el estudiante sobre su tiempo.
-
 ## Datos del equipo
 
 | Participante | Login 42 | Responsabilidad | Horas |
 |---|---|---|---:|
-| Sergio | `svalero` | Conceptualización, definición funcional y presentación | 7 h |
-| Jorge | `jomarti3` | Desarrollo e implementación técnica | 10 h |
-| Maria Fernanda | `marbecer` | - |  0h |
+| Sergio | `svalero` | Conceptualización, definición funcional y presentación. | 7 h |
+| Jorge | `jomarti3` | Desarrollo, diseño, implementación técnica y despliegue. | 20 h |
 
 **Repositorio:** `https://github.com/JorgeMartinezPizarro/calendar42`

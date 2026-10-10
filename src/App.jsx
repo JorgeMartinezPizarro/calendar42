@@ -285,10 +285,13 @@ function App() {
 
   // Lo que se pinta en el día y marca el calendario: lo del usuario y, en
   // Correcciones, las franjas libres del proyecto elegido.
-  const dayItems = useMemo(
-    () => (freeItems.length ? [...visibleItems, ...freeItems] : visibleItems),
-    [visibleItems, freeItems],
-  )
+  // Mientras se buscan franjas para corregir un proyecto, los slots propios se
+  // ocultan: se parecen a las franjas libres y no sirven para agendar (son para
+  // corregir a otros). El resto de lo del usuario sigue, para ver con qué choca.
+  const dayItems = useMemo(() => {
+    if (!freeKey) return visibleItems
+    return [...visibleItems.filter((it) => it.type !== 'slot'), ...freeItems]
+  }, [visibleItems, freeItems, freeKey])
 
   // Día (clave local) -> Set de tipos presentes, para las marcas del calendario.
   const dayTypes = useMemo(() => {

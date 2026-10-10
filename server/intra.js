@@ -676,9 +676,11 @@ export async function deleteSlots(accessToken, ids) {
  * Fusiona los bloques libres de 15 min de otros estudiantes en franjas por
  * corrector: { id, type: 'free', name, beginAt, endAt, slotIds, corrector }.
  */
-export function normalizeFreeSlots(rawSlots) {
+export function normalizeFreeSlots(rawSlots, { excludeUserId = null } = {}) {
   const free = rawSlots
     .filter((s) => s.scale_team == null)
+    // Los slots propios no sirven para que a uno le corrijan.
+    .filter((s) => excludeUserId == null || s.user?.id !== excludeUserId)
     .sort((a, b) => a.begin_at.localeCompare(b.begin_at))
 
   const byUser = new Map()
@@ -713,9 +715,9 @@ export function normalizeFreeSlots(rawSlots) {
 }
 
 /** Slots libres para corregir un proyecto en [from, to). Requiere scope `projects`. */
-export async function fetchProjectSlots(accessToken, { projectId, from, to }) {
+export async function fetchProjectSlots(accessToken, { projectId, userId = null, from, to }) {
   const raw = await fetchAllInRange(accessToken, `/projects/${projectId}/slots`, { from, to })
-  return normalizeFreeSlots(raw)
+  return normalizeFreeSlots(raw, { excludeUserId: userId })
 }
 
 /**

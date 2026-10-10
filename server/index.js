@@ -428,7 +428,7 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
     const token = await validAccessToken(session)
     const key = `pslots:${session.user.id}:${projectId}:${from.toISOString()}:${to.toISOString()}`
     const { value } = await cache.cached(key, { ttlMs: TTL_MS.freeSlots }, () =>
-      fetchProjectSlots(token, { projectId, from, to }),
+      fetchProjectSlots(token, { projectId, userId: session.user.id, from, to }),
     )
     res.json({ items: value })
   } catch (err) {
