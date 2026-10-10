@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { itemColor } from '../agendaTypes.js'
 import { useNow } from '../hooks/useNow.js'
 import { MIN_SLOT_MINUTES } from '../subscription.js'
@@ -137,14 +137,32 @@ function DayView({
   const showingPanel = Boolean(panel)
 
   // Al cambiar de día (o al volver de la ficha), llevar el scroll a la hora
-  // actual (hoy) o a una hora razonable de la mañana, no a las 00:00.
+  // actual (hoy) o a una hora razonable de la mañana, no a las 00:00. Si las
+  // horas aún no tienen tamaño (recién entrado, o ocultas en la vista Mes del
+  // móvil), el scroll queda pendiente y se aplica en cuanto lo tengan.
+  const scrollTargetRef = useRef(null)
+
+  const applyPendingScroll = useCallback(() => {
+    const container = scrollRef.current
+    const targetHour = scrollTargetRef.current
+    if (!container || targetHour == null || container.clientHeight === 0) return
+    const hourHeight = container.scrollHeight / HOURS.length
+    container.scrollTop = Math.max(0, (targetHour - 1) * hourHeight)
+    scrollTargetRef.current = null
+  }, [])
+
+  useEffect(() => {
+    scrollTargetRef.current = isToday ? new Date().getHours() : DEFAULT_SCROLL_HOUR
+    applyPendingScroll()
+  }, [date, isToday, showingPanel, applyPendingScroll])
+
   useEffect(() => {
     const container = scrollRef.current
-    if (!container) return
-    const hourHeight = container.scrollHeight / HOURS.length
-    const targetHour = isToday ? new Date().getHours() : DEFAULT_SCROLL_HOUR
-    container.scrollTop = Math.max(0, (targetHour - 1) * hourHeight)
-  }, [date, isToday, showingPanel])
+    if (!container || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(applyPendingScroll)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [showingPanel, applyPendingScroll])
 
   if (showingPanel) {
     return (

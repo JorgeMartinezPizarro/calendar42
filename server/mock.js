@@ -15,23 +15,36 @@ export function mockCoalition() {
   return DEMO_COALITIONS[Math.floor(Math.random() * DEMO_COALITIONS.length)]
 }
 
-// Inscripciones cambiadas desde la app en modo demo (id de evento -> inscrito).
-// Viven en memoria: se pierden al reiniciar el servidor, como el resto del demo.
-const demoSubscriptions = new Map()
-
-// Igual para exámenes (id de examen -> inscrito). En la intra real un estudiante
-// no puede inscribirse por la API; en el demo sí, para enseñar cómo sería.
-const demoExamSubscriptions = new Map()
+/**
+ * Estado de una sesión demo: lo que el visitante cambia desde la app. Va en su
+ * propia sesión (objeto plano, se guarda con ella), así que cada entrada al
+ * demo empieza limpia y varios visitantes no se pisan entre sí.
+ * - subscriptions / examSubscriptions: id de evento o examen -> inscrito
+ *   (en la intra real un estudiante no puede inscribirse a exámenes por la
+ *   API; en el demo sí, para enseñar cómo sería)
+ * - createdSlots, deletedChunkIds, bookings: slots abiertos y borrados, y
+ *   correcciones reservadas
+ */
+export function newDemoState() {
+  return {
+    subscriptions: {},
+    examSubscriptions: {},
+    nextId: 900_000,
+    createdSlots: [],
+    deletedChunkIds: [],
+    bookings: [],
+  }
+}
 
 /** Apunta o borra al usuario demo de un examen. */
-export function mockSetExamSubscription(examId, subscribed) {
-  demoExamSubscriptions.set(examId, subscribed)
+export function mockSetExamSubscription(state, examId, subscribed) {
+  state.examSubscriptions[examId] = subscribed
   return { subscribed }
 }
 
 /** Apunta o borra al usuario demo de un evento. */
-export function mockSetSubscription(eventId, subscribed) {
-  demoSubscriptions.set(eventId, subscribed)
+export function mockSetSubscription(state, eventId, subscribed) {
+  state.subscriptions[eventId] = subscribed
   return { subscribed }
 }
 
@@ -69,17 +82,10 @@ export function mockProjects() {
   }))
 }
 
-// Slots propios creados o borrados desde la app, correcciones reservadas: en
-// memoria, como el resto del demo.
-let demoNextId = 900_000
-const demoCreatedSlots = [] // elementos tipo slot
-const demoDeletedChunkIds = new Set()
-const demoBookings = [] // elementos tipo correction
-
 /** Abre un slot propio entre dos fechas; lo devuelve ya fusionado. */
-export function mockCreateSlot({ begin, end }) {
+export function mockCreateSlot(state, { begin, end }) {
   const chunks = Math.max(1, Math.round((end - begin) / 900_000))
-  const ids = Array.from({ length: chunks }, () => demoNextId++)
+  const ids = Array.from({ length: chunks }, () => state.nextId++)
   const item = {
     id: `slot-${ids[0]}`,
     type: 'slot',
@@ -91,16 +97,15 @@ export function mockCreateSlot({ begin, end }) {
     endAt: end.toISOString(),
     slotIds: ids,
   }
-  demoCreatedSlots.push(item)
+  state.createdSlots.push(item)
   return [item]
 }
 
 /** Borra bloques de slot propios (de ejemplo o creados en la sesión). */
-export function mockDeleteSlots(ids) {
-  for (const id of ids) demoDeletedChunkIds.add(id)
-  for (let i = demoCreatedSlots.length - 1; i >= 0; i -= 1) {
-    if (demoCreatedSlots[i].slotIds.some((id) => demoDeletedChunkIds.has(id))) demoCreatedSlots.splice(i, 1)
-  }
+export function mockDeleteSlots(state, ids) {
+  const deleted = new Set([...state.deletedChunkIds, ...ids])
+  state.deletedChunkIds = [...deleted]
+  state.createdSlots = state.createdSlots.filter((it) => !it.slotIds.some((id) => deleted.has(id)))
 }
 
 const FREE_SLOTS = [
@@ -151,10 +156,10 @@ export function mockProjectSlots({ projectId, from, to }) {
 }
 
 /** Reserva una corrección de ejemplo (30 min) del proyecto en ese instante. */
-export function mockBookCorrection({ projectId, beginAt }) {
+export function mockBookCorrection(state, { projectId, beginAt }) {
   const project = PROJECTS.find((p) => p.projectId === projectId)
   const item = {
-    id: `correction-${demoNextId++}`,
+    id: `correction-${state.nextId++}`,
     type: 'correction',
     kind: 'correction',
     name: `Corrección: ${project?.name ?? 'proyecto'}`,
@@ -166,7 +171,7 @@ export function mockBookCorrection({ projectId, beginAt }) {
     done: false,
     projectId,
   }
-  demoBookings.push(item)
+  state.bookings.push(item)
   return item
 }
 
@@ -216,7 +221,8 @@ function inRange(date, from, to) {
   return date >= from && date < to
 }
 
-export function mockAgenda({ from, to }) {
+export function mockAgenda(state, { from, to }) {
+  const deletedChunks = new Set(state.deletedChunkIds)
   const items = []
   const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
   const now = new Date()
@@ -230,7 +236,7 @@ export function mockAgenda({ from, to }) {
       const begin = at(y, m, t.day, t.start)
       if (!inRange(begin, from, to)) return
       const byDefault = i % 3 === 0
-      const subscribed = demoSubscriptions.get(base + i) ?? byDefault
+      const subscribed = state.subscriptions[base + i] ?? byDefault
       items.push({
         id: `event-${base + i}`,
         eventId: base + i,
@@ -254,7 +260,7 @@ export function mockAgenda({ from, to }) {
       const begin = at(y, m, t.day, t.start)
       if (!inRange(begin, from, to)) return
       const byDefault = i === 0
-      const subscribed = demoExamSubscriptions.get(base + i) ?? byDefault
+      const subscribed = state.examSubscriptions[base + i] ?? byDefault
       items.push({
         id: `exam-${base + i}`,
         examId: base + i,
@@ -276,7 +282,7 @@ export function mockAgenda({ from, to }) {
       if (!inRange(begin, from, to)) return
       const chunks = Math.round((t.hours * 60) / 15)
       const slotIds = Array.from({ length: chunks }, (_, k) => base + i * 10 + k)
-      if (slotIds.some((id) => demoDeletedChunkIds.has(id))) return
+      if (slotIds.some((id) => deletedChunks.has(id))) return
       items.push({
         id: `slot-${base + i}`,
         type: 'slot',
@@ -317,7 +323,7 @@ export function mockAgenda({ from, to }) {
       const d = now.getDate()
       const review = at(y, m, d, 15.5)
       if (inRange(review, from, to)) {
-        const subscribed = demoSubscriptions.get(base + 99) ?? false
+        const subscribed = state.subscriptions[base + 99] ?? false
         items.push({
           id: `event-${base + 99}`,
           eventId: base + 99,
@@ -335,7 +341,7 @@ export function mockAgenda({ from, to }) {
         })
       }
       const slot = at(y, m, d, 18)
-      if (inRange(slot, from, to) && ![base + 990, base + 991, base + 992, base + 993].some((id) => demoDeletedChunkIds.has(id))) {
+      if (inRange(slot, from, to) && ![base + 990, base + 991, base + 992, base + 993].some((id) => deletedChunks.has(id))) {
         items.push({
           id: `slot-${base + 99}`,
           type: 'slot',
@@ -354,7 +360,7 @@ export function mockAgenda({ from, to }) {
   }
 
   // Lo creado desde la app en esta sesión demo.
-  for (const it of [...demoCreatedSlots, ...demoBookings]) {
+  for (const it of [...state.createdSlots, ...state.bookings]) {
     if (inRange(new Date(it.beginAt), from, to)) items.push(it)
   }
 

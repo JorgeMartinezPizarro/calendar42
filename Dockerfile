@@ -21,7 +21,8 @@ COPY --from=build /app/dist ./dist
 RUN mkdir -p /data && chown node:node /data
 USER node
 ENV PORT=3000 \
-    SESSIONS_FILE=/data/sessions.json
+    SESSIONS_FILE=/data/sessions.json \
+    TZ=Europe/Madrid
 
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \

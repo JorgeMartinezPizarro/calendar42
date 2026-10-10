@@ -207,7 +207,7 @@ La aplicación estará disponible en:
 - Web: `http://localhost:5173`
 - API: `http://localhost:3000`
 
-El **modo demo con datos de ejemplo** está siempre disponible en la pantalla de login, también con credenciales: así se puede enseñar la aplicación aunque la intra esté caída o rechace las peticiones.
+El **modo demo con datos de ejemplo** está siempre disponible en la pantalla de login, también con credenciales: así se puede enseñar la aplicación aunque la intra esté caída o rechace las peticiones. Cada entrada al demo empieza limpia: lo que el visitante cambia (inscripciones, slots, reservas) va en su propia sesión, así que varios visitantes pueden probarlo a la vez sin pisarse.
 
 ## Docker
 

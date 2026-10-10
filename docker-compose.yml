@@ -13,6 +13,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      # Zona horaria del servidor: los datos de ejemplo del demo se generan en
+      # hora local (los de la intra traen la suya y no dependen de esto).
+      TZ: ${TZ:-Europe/Madrid}
       SESSIONS_FILE: /data/sessions.json
       # URL pública con la que se abre la app: a ella vuelve el login de la
       # intra, así que <PUBLIC_URL>/api/auth/callback debe estar registrada

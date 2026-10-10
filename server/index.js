@@ -39,6 +39,7 @@ import {
   mockProjects,
   mockSetExamSubscription,
   mockSetSubscription,
+  newDemoState,
 } from './mock.js'
 import {
   SESSION_COOKIE,
@@ -91,6 +92,15 @@ async function validAccessToken(session) {
   session.tokens = await refreshTokens(tokens.refreshToken)
   saveSession()
   return session.tokens.accessToken
+}
+
+/**
+ * Estado del demo de esta sesión (ver mock.js). Se crea al entrar al demo; las
+ * sesiones demo anteriores a este cambio lo reciben la primera vez que hace falta.
+ */
+function demoStateOf(session) {
+  if (!session.demoState) session.demoState = newDemoState()
+  return session.demoState
 }
 
 function sessionExpired(req, res) {
@@ -195,7 +205,8 @@ app.get('/api/auth/callback', async (req, res) => {
 })
 
 // Modo demo: siempre disponible, también con credenciales, para poder enseñar
-// la aplicación aunque la intra esté caída o rechace las peticiones.
+// la aplicación aunque la intra esté caída o rechace las peticiones. Cada
+// entrada empieza con un estado limpio, propio de la sesión.
 app.post('/api/auth/demo', (req, res) => {
   destroySession(req.sessionId)
   const user = {
@@ -206,7 +217,7 @@ app.post('/api/auth/demo', (req, res) => {
     campusId: DEFAULT_CAMPUS_ID,
     coalition: mockCoalition(),
   }
-  const id = createSession({ user, tokens: null, demo: true })
+  const id = createSession({ user, tokens: null, demo: true, demoState: newDemoState() })
   setCookie(res, SESSION_COOKIE, id, { maxAgeMs: 24 * 60 * 60 * 1000 })
   res.json({ user, demo: true })
 })
@@ -243,7 +254,7 @@ app.get('/api/agenda', requireSession, async (req, res) => {
   const session = req.session
   const campusId = session.user.campusId ?? DEFAULT_CAMPUS_ID
   if (session.demo) {
-    return res.json({ source: 'mock', campusId, ...mockAgenda({ from, to }) })
+    return res.json({ source: 'mock', campusId, ...mockAgenda(demoStateOf(session), { from, to }) })
   }
 
   const range = `${from.toISOString()}:${to.toISOString()}`
@@ -335,7 +346,8 @@ async function setSubscription(req, res, subscribed) {
   try {
     let event = null
     if (session.demo) {
-      mockSetSubscription(eventId, subscribed)
+      mockSetSubscription(demoStateOf(session), eventId, subscribed)
+      saveSession()
     } else {
       const token = await validAccessToken(session)
       const args = { eventId, userId: session.user.id }
@@ -370,7 +382,8 @@ app.post('/api/slots', requireSession, async (req, res) => {
   try {
     let items
     if (session.demo) {
-      items = mockCreateSlot({ begin, end })
+      items = mockCreateSlot(demoStateOf(session), { begin, end })
+      saveSession()
     } else {
       const token = await validAccessToken(session)
       items = await createSlot(token, {
@@ -395,7 +408,8 @@ app.delete('/api/slots', requireSession, async (req, res) => {
   const session = req.session
   try {
     if (session.demo) {
-      mockDeleteSlots(ids)
+      mockDeleteSlots(demoStateOf(session), ids)
+      saveSession()
     } else {
       await deleteSlots(await validAccessToken(session), ids)
     }
@@ -454,7 +468,8 @@ app.post('/api/corrections', requireSession, async (req, res) => {
   try {
     let item = null
     if (session.demo) {
-      item = mockBookCorrection({ projectId, beginAt: begin })
+      item = mockBookCorrection(demoStateOf(session), { projectId, beginAt: begin })
+      saveSession()
     } else {
       await bookCorrection(await validAccessToken(session), {
         projectId,
@@ -491,7 +506,8 @@ async function setExamSubscription(req, res, subscribed) {
         'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.',
     })
   }
-  mockSetExamSubscription(examId, subscribed)
+  mockSetExamSubscription(demoStateOf(session), examId, subscribed)
+  saveSession()
   forgetPersonal(session.user.id)
   res.json({ ok: true, subscribed, subscribers: null })
 }
@@ -518,7 +534,7 @@ app.get('/api/events/upcoming', requireSession, async (req, res) => {
   const to = new Date(from.getTime() + 365 * 86_400_000)
 
   if (session.demo) {
-    const { items } = mockAgenda({ from, to })
+    const { items } = mockAgenda(demoStateOf(session), { from, to })
     return res.json({ items: items.filter((it) => it.type === 'event') })
   }
 
