@@ -292,8 +292,6 @@ Calendar42 mantendría la responsabilidad sobre la información de 42, mientras 
 
 Más adelante podría estudiarse una integración bidireccional, siempre mediante autorización explícita del usuario, para superponer compromisos personales y actividad de 42 y detectar conflictos o huecos disponibles.
 
-**Esta línea todavía requiere estudio y validación técnica.**
-
 ## Visión
 
 Calendar42 empieza resolviendo un problema sencillo:
@@ -310,7 +308,7 @@ El siguiente paso es convertir esa visión en una herramienta con la que el estu
 
 | Participante | Login 42 | Responsabilidad | Horas |
 |---|---|---|---:|
-| Sergio | `svalero` | Conceptualización, definición funcional y presentación. | 7 h |
-| Jorge | `jomarti3` | Desarrollo, diseño, implementación técnica y despliegue. | 20 h |
+| Sergio | `svalero` | Idea inicial y pitch. | 7 h |
+| Jorge | `jomarti3` | Desarrollo, diseño, implementación, despliegue y gestión. | 30 h |
 
 **Repositorio:** `https://github.com/JorgeMartinezPizarro/calendar42`
