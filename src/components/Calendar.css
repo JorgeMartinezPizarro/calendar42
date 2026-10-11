@@ -50,6 +50,24 @@
   gap: 0.35rem;
 }
 
+/* Enlace al código fuente, como un botón más de la cabecera. */
+.calendar__source {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 0.55rem;
+  border: 1px solid var(--cal-border);
+  border-radius: 8px;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.calendar__source:hover,
+.calendar__source:focus-visible {
+  border-color: var(--cal-accent);
+  opacity: 1;
+}
+
 /* Resultado de la exportación: cómo importar el fichero, o por qué no se pudo. */
 .calendar__note {
   margin: -0.5rem 0 0.75rem;
@@ -165,7 +183,7 @@
   }
 
   .calendar__header {
-    gap: 0.35rem;
+    gap: 0.25rem;
     margin-bottom: 0.5rem;
   }
 
@@ -179,7 +197,11 @@
 
   .calendar__header button {
     min-height: 2.4rem;
-    padding: 0.35rem 0.6rem;
+    padding: 0.35rem 0.45rem;
+  }
+
+  .calendar__source {
+    padding: 0 0.4rem;
   }
 
   /* En móvil la cabecera no da para el texto: solo el icono. */
