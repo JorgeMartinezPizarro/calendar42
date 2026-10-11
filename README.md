@@ -190,6 +190,7 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 - La API tiene un límite de 2 peticiones por segundo y 1200 por hora, compartidos por todos los usuarios de la aplicación. Las llamadas pasan por un limitador y se cuentan: cerca del límite horario, la caché deja de renovar y sirve lo que tiene.
 - Para borrarse de un evento hace falta el id de la inscripción (`events_user`), no el del evento; se obtiene de `/v2/users/:id/events_users`. La intra valida aforo, fechas y plazo de cancelación: si rechaza la operación, la app muestra su motivo.
 - La caché (`server/cache.ts`) separa lo compartido de lo personal: los eventos y exámenes del campus se guardan por campus y rango durante 15 minutos, y los slots, correcciones e inscripciones por usuario durante 5 (los proyectos 10 y los slots libres de un proyecto 2). Pasado ese tiempo se sirve lo caducado al instante y se renueva en segundo plano, así nadie espera a la intra salvo la primera vez. Lo personal se invalida con cada acción del usuario (apuntarse, crear o borrar un slot, reservar). `GET /api/health` muestra las llamadas de la última hora y el estado de la caché.
+- El navegador guarda además una copia de lo último cargado (agenda, próximos eventos y proyectos) en `localStorage`: al recargar la página se pinta al momento con ella y se refresca por detrás. Es de cada usuario y se borra al cerrar sesión.
 - El token de autenticación permanece en el backend y no se expone al navegador.
 
 ## Puesta en marcha

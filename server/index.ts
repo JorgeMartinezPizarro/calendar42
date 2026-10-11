@@ -49,11 +49,14 @@ import {
   type DemoState,
 } from './mock.ts'
 import {
+  DEMO_SESSION_TTL_MS,
   SESSION_COOKIE,
+  SESSION_TTL_MS,
   STATE_COOKIE,
   clearCookie,
   createSession,
   destroySession,
+  flushSessions,
   requireSession,
   saveSession,
   sessionMiddleware,
@@ -67,6 +70,46 @@ const PORT = Number(process.env.PORT) || 3112
 const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 const DEFAULT_CAMPUS_ID = Number(process.env.FT_CAMPUS_ID) || 22 // 42 Madrid
 const APP_URL = process.env.APP_URL || 'http://localhost:5173'
+
+// Cabeceras de seguridad: nadie puede cargar la app dentro de un iframe (y
+// hacer pulsar "Apuntarme" a alguien sin que lo vea), ni el navegador debe
+// adivinar tipos de fichero, ni las URLs internas salen en el Referer.
+app.use((_req, res, next) => {
+  res.set({
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "frame-ancestors 'none'",
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'same-origin',
+  })
+  next()
+})
+
+/**
+ * Las peticiones que cambian algo (POST, DELETE...) solo se aceptan desde la
+ * propia app. La cookie es SameSite=Lax, que frena a otros dominios pero no a
+ * otro subdominio del mismo (otra app de ideniox.com, por ejemplo), y
+ * apuntarse a un evento no necesita cuerpo: un formulario ajeno podría
+ * hacerlo. Los navegadores mandan Origin en estas peticiones; sin Origin no
+ * es un navegador y no lleva la cookie de nadie.
+ */
+function sameOrigin(req: Request): boolean {
+  const origin = req.headers.origin
+  if (!origin) return true
+  if (origin === new URL(APP_URL).origin) return true
+  try {
+    return new URL(origin).host === req.headers.host
+  } catch {
+    return false
+  }
+}
+
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS' || sameOrigin(req)) {
+    next()
+    return
+  }
+  res.status(403).json({ error: 'Origen no permitido' })
+})
 
 app.use(express.json())
 app.use(sessionMiddleware)
@@ -101,15 +144,34 @@ function bodyOf(req: Request): Record<string, unknown> {
   return body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
 }
 
+// Refresco del token en curso por sesión. La app pide varias cosas a la vez
+// (meses de agenda, eventos, proyectos); si el token acaba de caducar, todas
+// esperan al mismo refresco. Si cada una refrescara por su cuenta gastarían el
+// mismo refresh token varias veces, la intra rechazaría las siguientes y la
+// sesión se cerraría sin motivo.
+const refreshing = new WeakMap<Session, Promise<string>>()
+
 /** Devuelve un access token válido para la sesión, refrescándolo si caducó. */
 async function validAccessToken(session: Session): Promise<string> {
   const { tokens } = session
   if (!tokens) throw httpError('Sesión sin tokens de la intra', { status: 401 })
   if (tokens.expiresAt > Date.now() + 30_000) return tokens.accessToken
-  if (!tokens.refreshToken) throw httpError('Sesión caducada', { status: 401 })
-  session.tokens = await refreshTokens(tokens.refreshToken)
-  saveSession()
-  return session.tokens.accessToken
+  const { refreshToken } = tokens
+  if (!refreshToken) throw httpError('Sesión caducada', { status: 401 })
+
+  let pending = refreshing.get(session)
+  if (!pending) {
+    pending = refreshTokens(refreshToken)
+      .then((fresh) => {
+        // Si la intra no manda refresh token nuevo, el anterior sigue valiendo.
+        session.tokens = { ...fresh, refreshToken: fresh.refreshToken ?? refreshToken }
+        saveSession()
+        return fresh.accessToken
+      })
+      .finally(() => refreshing.delete(session))
+    refreshing.set(session, pending)
+  }
+  return pending
 }
 
 /**
@@ -244,8 +306,8 @@ app.get('/api/auth/callback', async (req, res) => {
     const tokens = await exchangeCode(code)
     const user = await fetchMe(tokens.accessToken)
     destroySession(req.sessionId)
-    const id = createSession({ user, tokens, demo: false })
-    setCookie(res, SESSION_COOKIE, id, { maxAgeMs: 7 * 24 * 60 * 60 * 1000 })
+    const id = createSession({ user, tokens, demo: false }, SESSION_TTL_MS)
+    setCookie(res, SESSION_COOKIE, id, { maxAgeMs: SESSION_TTL_MS })
     res.redirect(`${APP_URL}/`)
   } catch (err) {
     console.error('[auth/callback]', asHttpError(err).message)
@@ -266,8 +328,8 @@ app.post('/api/auth/demo', (req, res) => {
     campusId: DEFAULT_CAMPUS_ID,
     coalition: mockCoalition(),
   }
-  const id = createSession({ user, tokens: null, demo: true, demoState: newDemoState() })
-  setCookie(res, SESSION_COOKIE, id, { maxAgeMs: 24 * 60 * 60 * 1000 })
+  const id = createSession({ user, tokens: null, demo: true, demoState: newDemoState() }, DEMO_SESSION_TTL_MS)
+  setCookie(res, SESSION_COOKIE, id, { maxAgeMs: DEMO_SESSION_TTL_MS })
   res.json({ user, demo: true })
 })
 
@@ -661,3 +723,12 @@ app.listen(PORT, () => {
   const what = servesFrontend ? 'Calendar42 (API y frontend)' : 'API'
   console.log(`${what} escuchando en http://localhost:${PORT} (${mode})`)
 })
+
+// Las sesiones se escriben agrupadas: al parar (docker stop, Ctrl+C) se
+// vuelcan los cambios pendientes antes de salir.
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    flushSessions()
+    process.exit(0)
+  })
+}

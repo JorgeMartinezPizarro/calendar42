@@ -7,6 +7,7 @@ import LoginView from './components/LoginView.tsx'
 import ModeBar, { type Mode, type ModeNote, type ModeNotes } from './components/ModeBar.tsx'
 import ProjectPicker from './components/ProjectPicker.tsx'
 import SlotCreator, { type SlotAction, type SlotEdge } from './components/SlotCreator.tsx'
+import { clearSnapshots, loadSnapshot, saveSnapshot, type MonthAgenda } from './agendaCache.ts'
 import { AGENDA_TYPES, isMine } from './agendaTypes.ts'
 import { fetchMe, logout, type LoggedIn, type Me } from './api/auth.ts'
 import { fetchAgenda, type Agenda } from './api/agenda.ts'
@@ -28,9 +29,6 @@ import { addDays, addMonths, getMonthGridRange, startOfDay, toDateKey } from './
 import './App.css'
 
 type AuthState = { status: 'checking' } | { status: 'ready'; me: Me; error?: string }
-
-/** Lo que se guarda de la agenda de cada mes cargado. */
-type MonthAgenda = Pick<Agenda, 'items' | 'counts' | 'warnings'>
 
 const EMPTY: never[] = []
 const NO_PROJECTS: Loadable<Project> = { status: 'idle', items: EMPTY, error: null }
@@ -78,30 +76,48 @@ function describeWarning(w: AgendaWarning): string {
   return `${SOURCE_LABELS[w.type] ?? w.type}: ${w.message}`
 }
 
+/** Clave de la copia local de un usuario: el demo aparte de las cuentas reales. */
+function cacheKeyOf(me: LoggedIn): string {
+  return me.demo ? 'demo' : String(me.user.id)
+}
+
 function App() {
   // ---- sesión -------------------------------------------------------------
   const [auth, setAuth] = useState<AuthState>({ status: 'checking' })
   const [authError] = useState(takeAuthErrorFromUrl)
 
+  /**
+   * Entra con la sesión que devuelve el servidor. Con una sesión que ya
+   * existía (recargar la página), la agenda se pinta al momento con la copia
+   * local de la última visita y se refresca por detrás. Un login nuevo, o
+   * ninguna sesión, empieza sin copia.
+   */
+  const enterSession = useCallback((me: Me, { fresh = false }: { fresh?: boolean } = {}) => {
+    const snapshot = me.user && !fresh ? loadSnapshot(cacheKeyOf(me)) : null
+    if (!snapshot) clearSnapshots()
+    setAgendaByMonth(snapshot?.months ?? {})
+    setUpcoming(snapshot ? { status: 'idle', items: snapshot.upcoming, error: null } : NO_UPCOMING)
+    setProjects(snapshot ? { status: 'idle', items: snapshot.projects, error: null } : NO_PROJECTS)
+    setAuth({ status: 'ready', me })
+  }, [])
+
   useEffect(() => {
     fetchMe()
-      .then((me) => setAuth({ status: 'ready', me }))
+      .then((me) => enterSession(me))
       .catch((err: unknown) => setAuth({ status: 'ready', me: { user: null }, error: messageOf(err) }))
-  }, [])
+  }, [enterSession])
 
   const backToLogin = useCallback(
     () =>
       fetchMe()
         .catch((): Me => ({ user: null }))
-        .then((me) => setAuth({ status: 'ready', me })),
-    [],
+        .then((me) => enterSession(me)),
+    [enterSession],
   )
 
   const handleLogout = async () => {
     await logout()
-    setAgendaByMonth({})
-    setProjects(NO_PROJECTS)
-    setUpcoming(NO_UPCOMING)
+    clearSnapshots()
     setFreeSlotsByKey({})
     setExportNote(null)
     await backToLogin()
@@ -132,7 +148,8 @@ function App() {
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const now = useNow()
 
-  // Agenda cacheada por mes visible: { 'YYYY-M': { items, counts, warnings } }
+  // Agenda cacheada por mes visible: { 'YYYY-M': { items, counts, warnings } }.
+  // Los meses con `stale` vienen de la copia local y se refrescan por detrás.
   const [agendaByMonth, setAgendaByMonth] = useState<Record<string, MonthAgenda>>({})
   const [status, setStatus] = useState<Loadable<Item>['status']>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -145,16 +162,18 @@ function App() {
   // siguiente.
   const todayKey = monthKey(today)
   const nextKey = monthKey(addMonths(today, 1))
-  const missingKeys = [...new Set([currentKey, todayKey, nextKey])].filter((k) => !agendaByMonth[k])
-  const missingList = missingKeys.join(',')
+  const neededKeys = [...new Set([currentKey, todayKey, nextKey])]
+  const missingList = neededKeys.filter((k) => !agendaByMonth[k]).join(',')
+  // Ya pintados con la copia local: se piden otra vez sin "Cargando…".
+  const staleList = neededKeys.filter((k) => agendaByMonth[k]?.stale).join(',')
 
   useEffect(() => {
-    if (!loggedIn || !missingList) return
+    if (!loggedIn || (!missingList && !staleList)) return
 
     const controller = new AbortController()
-    const keys = missingList.split(',')
+    const keys = [missingList, staleList].filter(Boolean).join(',').split(',')
 
-    setStatus('loading')
+    if (missingList) setStatus('loading')
     setError(null)
 
     Promise.all(
@@ -180,7 +199,7 @@ function App() {
       })
 
     return () => controller.abort()
-  }, [loggedIn, missingList, loadFailure])
+  }, [loggedIn, missingList, staleList, loadFailure])
 
   const currentMonth = agendaByMonth[currentKey]
 
@@ -332,6 +351,16 @@ function App() {
     }
     return map
   }, [dayItems])
+
+  // Copia local de lo cargado, para pintar al momento la próxima vez que se
+  // abra la página. Justo después de leerla (todo `stale`) no hay nada nuevo.
+  const cacheKey = session ? cacheKeyOf(session) : null
+  useEffect(() => {
+    if (!cacheKey) return
+    const months = Object.values(agendaByMonth)
+    if (months.length > 0 && months.every((m) => m.stale)) return
+    saveSnapshot(cacheKey, { months: agendaByMonth, upcoming: upcoming.items, projects: projects.items })
+  }, [cacheKey, agendaByMonth, upcoming.items, projects.items])
 
   // ---- ficha --------------------------------------------------------------
   // Se abre al pulsar un elemento (lista o vista del día) y ocupa el sitio de
@@ -616,7 +645,7 @@ function App() {
         authConfigured={Boolean(loggedOut?.authConfigured)}
         demoAvailable={Boolean(loggedOut?.demoAvailable)}
         authError={authError ?? auth.error}
-        onLoggedIn={(me) => setAuth({ status: 'ready', me })}
+        onLoggedIn={(me) => enterSession(me, { fresh: true })}
       />
     )
   }

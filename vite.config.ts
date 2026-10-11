@@ -16,9 +16,11 @@ export default defineConfig(({ mode }) => {
         usePolling: true,
         interval: 300,
       },
-      // Las llamadas a /api van al servidor Express (server/index.ts).
+      // Las llamadas a /api van al servidor Express (server/index.ts). Se
+      // conserva el Host del navegador: la API comprueba que las peticiones
+      // que cambian algo vienen de la propia app (Origin = Host).
       proxy: {
-        '/api': apiUrl,
+        '/api': { target: apiUrl, changeOrigin: false },
       },
     },
   }
