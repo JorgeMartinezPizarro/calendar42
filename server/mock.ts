@@ -125,6 +125,22 @@ export function mockOverlaps(state: DemoState, begin: Date, end: Date): AgendaIt
   )
 }
 
+/** Margen libre que la intra exige entre dos slots propios (como src/subscription.ts). */
+export const SLOT_GAP_MINUTES = 15
+
+/**
+ * Slots propios del usuario demo (y correcciones que da) a menos de
+ * SLOT_GAP_MINUTES de [begin, end) sin solaparse: la intra no deja pegarlos.
+ */
+export function mockSlotsTooClose(state: DemoState, begin: Date, end: Date): AgendaItem[] {
+  const gap = SLOT_GAP_MINUTES * 60_000
+  const from = new Date(begin.getTime() - gap)
+  const to = new Date(end.getTime() + gap)
+  return mockOverlaps(state, from, to).filter(
+    (it) => it.type === 'slot' || (it.type === 'correction' && it.role === 'corrector'),
+  )
+}
+
 /** Abre un slot propio entre dos fechas; lo devuelve ya fusionado. */
 export function mockCreateSlot(state: DemoState, { begin, end }: { begin: Date; end: Date }): AgendaItem[] {
   const chunks = Math.max(1, Math.round((end.getTime() - begin.getTime()) / 900_000))

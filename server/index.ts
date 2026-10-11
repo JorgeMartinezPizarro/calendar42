@@ -43,7 +43,9 @@ import {
   mockProjects,
   mockSetExamSubscription,
   mockSetSubscription,
+  mockSlotsTooClose,
   newDemoState,
+  SLOT_GAP_MINUTES,
   type DemoState,
 } from './mock.ts'
 import {
@@ -444,6 +446,11 @@ app.post('/api/slots', requireSession, async (req, res) => {
     let items: AgendaItem[]
     if (session.demo) {
       if (rejectDemoOverlap(res, session, begin, end)) return
+      const near = mockSlotsTooClose(demoStateOf(session), begin, end)
+      if (near.length) {
+        res.status(409).json({ error: `Deja ${SLOT_GAP_MINUTES} minutos libres entre slots: queda pegado a otro slot` })
+        return
+      }
       items = mockCreateSlot(demoStateOf(session), { begin, end })
       saveSession()
     } else {

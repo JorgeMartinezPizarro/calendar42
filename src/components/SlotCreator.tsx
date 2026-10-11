@@ -1,4 +1,4 @@
-import { MIN_SLOT_MINUTES, slotCreateState } from '../subscription.ts'
+import { MIN_SLOT_MINUTES, SLOT_GAP_MINUTES, slotCreateState } from '../subscription.ts'
 import type { Item, TimeRange } from '../types.ts'
 import { formatRange, formatTime } from '../utils/date.ts'
 import './SlotCreator.css'
@@ -65,7 +65,8 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
         <p className="slotcreator__hint">
           Elige un día y marca cuándo puedes corregir: arrastrando sobre las horas con el ratón o tocando una
           hora con el dedo. Luego ajusta la franja con los tiradores o con los botones de 15 minutos. Los slots
-          van en bloques de 15 minutos y duran al menos {MIN_SLOT_MINUTES}.
+          van en bloques de 15 minutos, duran al menos {MIN_SLOT_MINUTES} y entre dos slots deben quedar
+          {SLOT_GAP_MINUTES} minutos libres.
         </p>
       )}
 

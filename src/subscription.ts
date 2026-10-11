@@ -14,6 +14,12 @@ const SCOPE_REASON =
 export const MIN_SLOT_MINUTES = 30
 
 /**
+ * Margen libre que la intra exige antes y después de un slot: dos slots
+ * propios no pueden ir pegados.
+ */
+export const SLOT_GAP_MINUTES = 15
+
+/**
  * Duración con la que se comprueba si una corrección que se va a agendar choca
  * con la agenda. La de cada proyecto la fija su escala en la intra; media hora
  * es la habitual.
@@ -141,7 +147,8 @@ export function slotDeleteState(item: Item, now: Date = new Date()): ButtonState
 /**
  * Crear un slot propio en una franja marcada en las horas.
  * - items: la agenda; el slot no puede pisar otro slot propio, una corrección
- *   ni nada a lo que el usuario esté apuntado.
+ *   ni nada a lo que el usuario esté apuntado, ni quedar a menos de
+ *   SLOT_GAP_MINUTES de otro slot propio.
  */
 export function slotCreateState(range: TimeRange, now: Date = new Date(), items: Item[] = []): ButtonState {
   const blocked = (reason: string): ButtonState => ({ enabled: false, reason })
@@ -151,7 +158,32 @@ export function slotCreateState(range: TimeRange, now: Date = new Date(), items:
   }
   const conflicts = overlappingItems({ id: 'nuevo-slot', ...range }, items)
   if (conflicts.length) return blocked(overlapReason(conflicts))
+  const [near] = slotsTooClose(range, items)
+  if (near) {
+    return blocked(
+      `Deja ${SLOT_GAP_MINUTES} minutos libres entre slots: queda pegado a ${near.name} (${formatTime(near.beginAt)}–${formatTime(near.endAt)})`,
+    )
+  }
   return { enabled: true, reason: null }
+}
+
+/**
+ * Slots propios a menos de SLOT_GAP_MINUTES de la franja (antes o después),
+ * por orden de inicio. También cuentan las correcciones que das: ocupan un
+ * slot tuyo que alguien ya ha reservado.
+ */
+export function slotsTooClose(range: TimeRange, items: Item[]): Item[] {
+  const gap = SLOT_GAP_MINUTES * 60_000
+  const begin = range.beginAt.getTime() - gap
+  const end = range.endAt.getTime() + gap
+  return items
+    .filter(
+      (other) =>
+        (other.type === 'slot' || (other.type === 'correction' && other.role === 'corrector')) &&
+        other.beginAt.getTime() < end &&
+        other.endAt.getTime() > begin,
+    )
+    .sort((a, b) => a.beginAt.getTime() - b.beginAt.getTime())
 }
 
 /**
