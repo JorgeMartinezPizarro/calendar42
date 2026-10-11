@@ -70,22 +70,6 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 | `GET /v2/projects/:id/scales` | Escala de evaluación del proyecto, necesaria para reservar | usuario |
 | `POST /v2/scale_teams` | Reservar una corrección (puede estar reservado al personal) | usuario |
 
-### Decisiones y dificultades técnicas
-
-- Los endpoints de exámenes devuelven `403` a los estudiantes, por lo que los exámenes se consultan utilizando el token de aplicación mediante `client_credentials`.
-- La lista de inscritos de un examen (`/v2/exams/:id/exams_users`) está restringida a staff, por lo que para conocer los exámenes del usuario se utiliza `/v2/users/:id/exams`.
-- `/v2/users/:id/coalitions` no indica a qué cursus pertenece cada coalición, por lo que un alumno que hizo la piscina recibe varias. La del cursus actual se identifica cruzándolas con los blocs del cursus (`/v2/blocs`).
-- Los endpoints relacionados con slots y correcciones requieren el scope `projects`.
-- Apuntarse y borrarse de eventos (`/v2/events_users`) requiere el scope `profile`; sin él la intra responde `403 Insufficient scope`. Si la app OAuth no lo tenía activado, hay que activarlo en la intra y volver a iniciar sesión para que el token lo incluya.
-- La API no deja a un estudiante inscribirse ni borrarse de un examen (`/v2/exams_users`), así que en los exámenes el botón sale desactivado con ese motivo. En el modo demo sí se puede (en memoria, `/api/exams/:id/subscription`), para enseñar cómo funcionaría cuando el staff de 42 autorice la aplicación. Con la cuenta real, la ficha del examen explica el motivo junto al botón desactivado.
-- Los slots propios se crean con `POST /v2/slots` y se borran bloque a bloque con `DELETE /v2/slots/:id` (scope `projects`). La intra valida la franja (futuro, bloques de 15 min); sus motivos se muestran junto al botón.
-- Para reservar una corrección se consultan los slots libres del proyecto (`/v2/projects/:id/slots`) y se intenta crear el `scale_team` con la escala principal del proyecto y el corrector dueño del slot. Si la intra reserva esa acción al personal, el motivo aparece junto al botón.
-- La API tiene un límite de 2 peticiones por segundo y 1200 por hora, compartidos por todos los usuarios de la aplicación. Las llamadas pasan por un limitador y se cuentan: cerca del límite horario, la caché deja de renovar y sirve lo que tiene.
-- Para borrarse de un evento hace falta el id de la inscripción (`events_user`), no el del evento; se obtiene de `/v2/users/:id/events_users`. La intra valida aforo, fechas y plazo de cancelación: si rechaza la operación, la app muestra su motivo.
-- La caché (`server/cache.ts`) separa lo compartido de lo personal: los eventos y exámenes del campus se guardan por campus y rango durante 15 minutos, y los slots, correcciones e inscripciones por usuario durante 5 (los proyectos 10 y los slots libres de un proyecto 2). Pasado ese tiempo se sirve lo caducado al instante y se renueva en segundo plano, así nadie espera a la intra salvo la primera vez. Lo personal se invalida con cada acción del usuario (apuntarse, crear o borrar un slot, reservar). `GET /api/health` muestra las llamadas de la última hora y el estado de la caché.
-- El navegador guarda además una copia de lo último cargado (agenda, próximos eventos y proyectos) en `localStorage`: al recargar la página se pinta al momento con ella y se refresca por detrás. Es de cada usuario y se borra al cerrar sesión.
-- El token de autenticación permanece en el backend y no se expone al navegador.
-
 ## Puesta en marcha
 
 Necesitas Node 22.18 o superior (ejecuta el TypeScript del servidor directamente, sin compilar) y una aplicación OAuth registrada en:
@@ -145,25 +129,6 @@ make stop      # para y elimina el contenedor
 También `make restart`, `make status`, `make shell`, `make clean` (borra además la imagen y el volumen de sesiones) y `make doctor`, que muestra el puerto y la URL que se van a aplicar y quién ocupa ese puerto en el host: es lo primero que mirar si `make start` falla con "port is already allocated". Sin `make`, los mismos comandos son `docker compose build`, `docker compose up -d --build`, `docker compose logs -f` y `docker compose down`.
 
 El contenedor lee las credenciales del mismo `.env`. Como todo va por el puerto 3000, el login de la intra vuelve a `http://localhost:3000/api/auth/callback`: registra también esa redirect URI en la app OAuth. Para publicarlo con otra URL, define `PUBLIC_URL` (y `PUBLIC_PORT` para el puerto del host) en `.env`. Las sesiones se guardan en el volumen `calendar42-data` y sobreviven a reinicios.
-
-## API propia
-
-| Ruta | Descripción |
-|---|---|
-| `GET /api/auth/login` | Redirige al login de la intra |
-| `GET /api/auth/callback` | Vuelta del login y creación de la sesión |
-| `GET /api/auth/me` | Usuario de la sesión |
-| `POST /api/auth/logout` | Cierra la sesión |
-| `GET /api/agenda?from&to` | Construye la agenda entre dos fechas ISO |
-| `GET /api/events/upcoming` | Todos los eventos del campus desde hoy, con las inscripciones del usuario |
-| `GET /api/projects` | Proyectos del usuario en su cursus, con su estado |
-| `GET /api/projects/:id/slots?from&to` | Slots libres de otros estudiantes para corregir el proyecto |
-| `POST /api/corrections` | Reserva una corrección del proyecto en un instante |
-| `POST /api/slots` | Abre un slot de corrección propio entre dos instantes |
-| `DELETE /api/slots` | Borra los bloques de un slot propio |
-| `POST /api/events/:id/subscription` | Apunta al usuario al evento |
-| `DELETE /api/events/:id/subscription` | Borra al usuario del evento |
-| `POST/DELETE /api/exams/:id/subscription` | Apunta o borra de un examen (solo en el modo demo; la API de 42 no lo permite a estudiantes) |
 
 ## Estructura
 
