@@ -1,24 +1,45 @@
-import { MIN_SLOT_MINUTES, slotCreateState } from '../subscription.js'
-import { formatRange, formatTime } from '../utils/date.js'
+import { MIN_SLOT_MINUTES, slotCreateState } from '../subscription.ts'
+import type { Item, TimeRange } from '../types.ts'
+import { formatRange, formatTime } from '../utils/date.ts'
 import './SlotCreator.css'
 
+/** Último envío al crear un slot. */
+export interface SlotAction {
+  busy: boolean
+  error: string | null
+  /** El slot creado, para el aviso "Slot creado". */
+  created: TimeRange | null
+}
+
+export type SlotEdge = 'start' | 'end'
+
+interface SlotCreatorProps {
+  /** Franja marcada en las horas del día, pendiente de crear. */
+  pending: TimeRange | null
+  action: SlotAction
+  now: Date
+  /** La agenda, para no crear un slot que pise lo que ya hay. */
+  items?: Item[]
+  onCreate: () => void
+  onCancel: () => void
+  /** Mueve el inicio o el fin de la franja, en minutos. */
+  onAdjust?: (edge: SlotEdge, minutes: number) => void
+}
+
 /**
- * Modo "Crear slots": instrucciones, la franja marcada en las horas del día
- * (pending: { beginAt, endAt } o null), su ajuste fino y el botón para crearla.
- * - items: la agenda, para no crear un slot que pise lo que ya hay
- * - onAdjust(edge, minutos): mueve el inicio ('start') o el fin ('end')
- * - action: { busy, error, created } del último envío; el error se pinta en
- *   rojo junto al botón, y lo que no procede (motivo) en naranja.
+ * Modo "Crear slots": instrucciones, la franja marcada, su ajuste fino y el
+ * botón para crearla. El error de la intra se pinta en rojo junto al botón, y
+ * lo que no procede (motivo) en naranja.
  */
-function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onAdjust }) {
+function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onAdjust }: SlotCreatorProps) {
   const state = pending ? slotCreateState(pending, now, items) : null
 
-  const stepper = (edge, label, time) => (
+  const stepper = (adjust: NonNullable<SlotCreatorProps['onAdjust']>, edge: SlotEdge, label: string, time: Date) => (
     <span className="slotcreator__step">
       <span className="slotcreator__step-label">{label}</span>
       <button
         type="button"
-        onClick={() => onAdjust(edge, -15)}
+        onClick={() => adjust(edge, -15)}
         disabled={action.busy}
         aria-label={`${label} 15 minutos antes`}
       >
@@ -27,7 +48,7 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
       <span className="slotcreator__step-time">{formatTime(time)}</span>
       <button
         type="button"
-        onClick={() => onAdjust(edge, 15)}
+        onClick={() => adjust(edge, 15)}
         disabled={action.busy}
         aria-label={`${label} 15 minutos después`}
       >
@@ -42,19 +63,19 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
 
       {!pending && (
         <p className="slotcreator__hint">
-          Elige un día y marca cuándo puedes corregir: arrastrando sobre las horas con el ratón o
-          tocando una hora con el dedo. Luego ajusta la franja con los tiradores o con los botones
-          de 15 minutos. Los slots van en bloques de 15 minutos y duran al menos {MIN_SLOT_MINUTES}.
+          Elige un día y marca cuándo puedes corregir: arrastrando sobre las horas con el ratón o tocando una
+          hora con el dedo. Luego ajusta la franja con los tiradores o con los botones de 15 minutos. Los slots
+          van en bloques de 15 minutos y duran al menos {MIN_SLOT_MINUTES}.
         </p>
       )}
 
-      {pending ? (
+      {pending && state ? (
         <div className="slotcreator__pending">
           <p className="slotcreator__range">Nuevo slot · {formatRange(pending.beginAt, pending.endAt)}</p>
           {onAdjust && (
             <div className="slotcreator__steps">
-              {stepper('start', 'Inicio', pending.beginAt)}
-              {stepper('end', 'Fin', pending.endAt)}
+              {stepper(onAdjust, 'start', 'Inicio', pending.beginAt)}
+              {stepper(onAdjust, 'end', 'Fin', pending.endAt)}
             </div>
           )}
           <div className="slotcreator__actions">
@@ -74,9 +95,7 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
             >
               Cancelar
             </button>
-            {state.reason && !action.error && (
-              <span className="slotcreator__reason">{state.reason}</span>
-            )}
+            {state.reason && !action.error && <span className="slotcreator__reason">{state.reason}</span>}
             {action.error && (
               <span className="slotcreator__error" role="alert">
                 {action.error}
@@ -86,8 +105,8 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
         </div>
       ) : action.created ? (
         <p className="slotcreator__ok">
-          Slot creado: {formatRange(action.created.beginAt, action.created.endAt)}. Puedes borrarlo
-          desde su ficha.
+          Slot creado: {formatRange(action.created.beginAt, action.created.endAt)}. Puedes borrarlo desde su
+          ficha.
         </p>
       ) : null}
     </section>

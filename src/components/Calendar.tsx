@@ -1,21 +1,26 @@
-import { AGENDA_TYPES } from '../agendaTypes.js'
-import {
-  WEEKDAY_LABELS,
-  addMonths,
-  formatMonthYear,
-  getMonthGrid,
-  isSameDay,
-  toDateKey,
-} from '../utils/date.js'
+import { AGENDA_TYPES } from '../agendaTypes.ts'
+import type { ItemType } from '../types.ts'
+import { WEEKDAY_LABELS, addMonths, formatMonthYear, getMonthGrid, isSameDay, toDateKey } from '../utils/date.ts'
 import './Calendar.css'
 
-/**
- * Vista mensual.
- * - viewDate: primer día del mes mostrado (lo controla el padre).
- * - dayTypes: Map 'YYYY-MM-DD' -> Set de tipos con algo del usuario ese día.
- *   Se pinta una barra por tipo debajo del número.
- */
-function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayTypes }) {
+/** De dónde viene la elección de un día: 'today' = botón "Hoy". */
+export type SelectSource = 'today' | undefined
+
+interface CalendarProps {
+  /** Primer día del mes mostrado (lo controla el padre). */
+  viewDate: Date
+  onViewDateChange: (date: Date) => void
+  selectedDate: Date | null
+  onSelectDate: (date: Date, source?: SelectSource) => void
+  /**
+   * 'YYYY-MM-DD' -> tipos con algo del usuario ese día. Se pinta una barra por
+   * tipo debajo del número.
+   */
+  dayTypes: Map<string, Set<ItemType>>
+}
+
+/** Vista mensual. */
+function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayTypes }: CalendarProps) {
   const today = new Date()
   const cells = getMonthGrid(viewDate.getFullYear(), viewDate.getMonth())
 
@@ -52,9 +57,10 @@ function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayT
       <div className="calendar__grid">
         {cells.map(({ date, inMonth }) => {
           const isToday = isSameDay(date, today)
-          const isSelected = selectedDate && isSameDay(date, selectedDate)
-          const types = dayTypes?.get(toDateKey(date))
-          const hasItems = Boolean(types && types.size)
+          const isSelected = Boolean(selectedDate && isSameDay(date, selectedDate))
+          const types = dayTypes.get(toDateKey(date))
+          const present = types ? AGENDA_TYPES.filter((t) => types.has(t.type)) : []
+          const hasItems = present.length > 0
           const className = [
             'calendar__day',
             !inMonth && 'calendar__day--outside',
@@ -67,20 +73,16 @@ function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayT
             .filter(Boolean)
             .join(' ')
 
-          const present = hasItems ? AGENDA_TYPES.filter((t) => types.has(t.type)) : []
-
           return (
             <button
               key={date.toISOString()}
               type="button"
               className={className}
               onClick={() => onSelectDate(date)}
-              aria-pressed={Boolean(isSelected)}
+              aria-pressed={isSelected}
               aria-current={isToday ? 'date' : undefined}
               aria-label={
-                hasItems
-                  ? `${date.getDate()}, ${present.map((t) => t.label.toLowerCase()).join(', ')}`
-                  : undefined
+                hasItems ? `${date.getDate()}, ${present.map((t) => t.label.toLowerCase()).join(', ')}` : undefined
               }
             >
               <span className="calendar__day-number">{date.getDate()}</span>

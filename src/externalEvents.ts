@@ -3,6 +3,8 @@
 // venir en la descripción. En la intra salen en otro color y su botón de
 // inscribirse falla.
 
+import type { EventExtras } from './types.ts'
+
 /**
  * Tipos (`kind`) de la intra que se tratan como externos. Para comprobar el de
  * un evento concreto, su ficha lo muestra en la cabecera ("Evento · Externo").
@@ -23,7 +25,7 @@ const OWN_RE = /(^https?:\/\/([a-z0-9-]+\.)*42\.fr\b|^https?:\/\/([a-z0-9-]+\.)*
  * Enlace de inscripción en un texto. Primero uno con pinta de formulario; si
  * `anyLink`, cualquier enlace que no sea de 42.
  */
-export function findSignupUrl(text, { anyLink = false } = {}) {
+export function findSignupUrl(text: string | null | undefined, { anyLink = false } = {}): string | null {
   const urls = (String(text ?? '').match(URL_RE) ?? []).map((u) => u.replace(/[.,;:!?]+$/, ''))
   const signup = urls.find((u) => SIGNUP_RE.test(u) && !OWN_RE.test(u))
   if (signup) return signup
@@ -31,12 +33,12 @@ export function findSignupUrl(text, { anyLink = false } = {}) {
 }
 
 /**
- * Añade a un evento:
- * - externalKind: la intra lo marca como externo (su botón no funciona);
- * - signupUrl: enlace de inscripción encontrado en la descripción, o null;
- * - external: se pinta y etiqueta como externo (cualquiera de los dos).
+ * Añade a un evento si es externo (ver EventExtras). El resto de elementos se
+ * devuelven tal cual.
  */
-export function withEventExtras(item) {
+export function withEventExtras<T extends { type: string; kind: string; description: string }>(
+  item: T,
+): T & EventExtras {
   if (item.type !== 'event') return item
   const externalKind = EXTERNAL_KINDS.has(item.kind)
   const signupUrl = findSignupUrl(item.description, { anyLink: externalKind })

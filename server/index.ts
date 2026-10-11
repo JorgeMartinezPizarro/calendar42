@@ -1,10 +1,11 @@
 import 'dotenv/config'
-import express from 'express'
+import express, { type Request, type Response } from 'express'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createCache } from './cache.js'
+import type { AgendaItem, SessionUser } from '../shared/types.ts'
+import { createCache } from './cache.ts'
 import {
   INTRA_HOURLY_LIMIT,
   OAUTH_SCOPES,
@@ -28,20 +29,23 @@ import {
   refreshTokens,
   subscribeToEvent,
   unsubscribeFromEvent,
-} from './intra.js'
+  type CampusAgenda,
+  type PersonalAgenda,
+} from './intra.ts'
 import {
   mockAgenda,
   mockBookCorrection,
   mockCoalition,
   mockCreateSlot,
-  mockOverlaps,
   mockDeleteSlots,
+  mockOverlaps,
   mockProjectSlots,
   mockProjects,
   mockSetExamSubscription,
   mockSetSubscription,
   newDemoState,
-} from './mock.js'
+  type DemoState,
+} from './mock.ts'
 import {
   SESSION_COOKIE,
   STATE_COOKIE,
@@ -51,11 +55,13 @@ import {
   requireSession,
   saveSession,
   sessionMiddleware,
+  sessionOf,
   setCookie,
-} from './sessions.js'
+} from './sessions.ts'
+import { asHttpError, httpError, type HttpError, type Session } from './types.ts'
 
 const app = express()
-const PORT = Number(process.env.PORT) || 3000
+const PORT = Number(process.env.PORT) || 3112
 const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 const DEFAULT_CAMPUS_ID = Number(process.env.FT_CAMPUS_ID) || 22 // 42 Madrid
 const APP_URL = process.env.APP_URL || 'http://localhost:5173'
@@ -63,7 +69,7 @@ const APP_URL = process.env.APP_URL || 'http://localhost:5173'
 app.use(express.json())
 app.use(sessionMiddleware)
 
-// Caché en memoria (ver cache.js). Lo del campus es igual para todos los
+// Caché en memoria (ver cache.ts). Lo del campus es igual para todos los
 // alumnos y cambia poco; lo personal se invalida además con cada acción del
 // usuario. Pasado el tiempo en fresco se sirve caducado y se renueva detrás.
 const TTL_MS = {
@@ -76,42 +82,51 @@ const cache = createCache({ isLowBudget: intraBudgetLow })
 
 // Un resultado con fallos pasajeros (intra caída, 429…) no se guarda: así la
 // siguiente petición vuelve a intentarlo enseguida.
-const withoutTransientFailures = (value) =>
-  !value.warnings?.some((w) => w.code === 'transient_error')
+const withoutTransientFailures = (value: CampusAgenda | PersonalAgenda) =>
+  !value.warnings.some((w) => w.code === 'transient_error')
 
-function parseDate(value, fallback) {
+/** Fecha de un parámetro: `fallback` si falta, null si no es una fecha válida. */
+function parseDate(value: unknown, fallback: Date | null): Date | null {
   if (!value) return fallback
+  if (typeof value !== 'string') return null
   const d = new Date(value)
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+/** Cuerpo JSON de la petición como objeto (vacío si no lo es). */
+function bodyOf(req: Request): Record<string, unknown> {
+  const body: unknown = req.body
+  return body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+}
+
 /** Devuelve un access token válido para la sesión, refrescándolo si caducó. */
-async function validAccessToken(session) {
+async function validAccessToken(session: Session): Promise<string> {
   const { tokens } = session
+  if (!tokens) throw httpError('Sesión sin tokens de la intra', { status: 401 })
   if (tokens.expiresAt > Date.now() + 30_000) return tokens.accessToken
-  if (!tokens.refreshToken) throw Object.assign(new Error('Sesión caducada'), { status: 401 })
+  if (!tokens.refreshToken) throw httpError('Sesión caducada', { status: 401 })
   session.tokens = await refreshTokens(tokens.refreshToken)
   saveSession()
   return session.tokens.accessToken
 }
 
 /**
- * Estado del demo de esta sesión (ver mock.js). Se crea al entrar al demo; las
+ * Estado del demo de esta sesión (ver mock.ts). Se crea al entrar al demo; las
  * sesiones demo anteriores a este cambio lo reciben la primera vez que hace falta.
  */
-function demoStateOf(session) {
+function demoStateOf(session: Session): DemoState {
   if (!session.demoState) session.demoState = newDemoState()
   return session.demoState
 }
 
-function sessionExpired(req, res) {
+function sessionExpired(req: Request, res: Response): void {
   destroySession(req.sessionId)
   clearCookie(res, SESSION_COOKIE)
-  return res.status(401).json({ error: 'La sesión ha caducado, vuelve a iniciar sesión' })
+  res.status(401).json({ error: 'La sesión ha caducado, vuelve a iniciar sesión' })
 }
 
 /** 409 si lo que se va a añadir a la agenda demo pisa algo que ya está. */
-function rejectDemoOverlap(res, session, begin, end) {
+function rejectDemoOverlap(res: Response, session: Session, begin: Date, end: Date): boolean {
   const overlaps = mockOverlaps(demoStateOf(session), begin, end)
   if (!overlaps.length) return false
   const names = overlaps.map((it) => it.name).join(', ')
@@ -119,18 +134,28 @@ function rejectDemoOverlap(res, session, begin, end) {
   return true
 }
 
+// Estado de la intra -> estado con el que responde la API propia.
+const STATUS_FOR: Record<number, number> = { 400: 400, 401: 403, 403: 403, 404: 404, 422: 409 }
+
 /**
  * Responde un fallo de la intra con un mensaje claro y lo deja en el log con
  * la respuesta completa. `hint` se añade cuando la intra no autoriza la acción.
  */
-function sendIntraFailure(req, res, err, what, { hint = '' } = {}) {
-  console.error(`[${what}] ${req.session?.user?.login ?? '?'}:`, err.message)
+function sendIntraFailure(
+  req: Request,
+  res: Response,
+  error: unknown,
+  what: string,
+  { hint = '' }: { hint?: string } = {},
+): void {
+  const err: HttpError = asHttpError(error)
+  console.error(`[${what}] ${req.session?.user.login ?? '?'}:`, err.message)
   if (err.body) console.error(`[${what}] respuesta de la intra:`, err.body)
   if (err.status === 401 && !isNotAuthorized(err)) return sessionExpired(req, res)
-  const status = { 400: 400, 401: 403, 403: 403, 404: 404, 422: 409 }[err.status] ?? 502
+  const status = (err.status != null ? STATUS_FOR[err.status] : undefined) ?? 502
   // Sin el scope necesario la intra responde 403 "Insufficient scope".
   const missingScope = err.status === 403 && /scope/i.test(String(err.reason))
-  let message
+  let message: string
   if (missingScope) {
     message = `La sesión no tiene el scope que pide la intra (${err.reason}). Actívalo en la app OAuth de la intra, cierra sesión y vuelve a entrar.`
   } else if (isNotAuthorized(err)) {
@@ -141,6 +166,14 @@ function sendIntraFailure(req, res, err, what, { hint = '' } = {}) {
     message = err.message
   }
   res.status(status).json({ error: message })
+}
+
+/** Respuesta genérica a un fallo al leer de la intra (agenda, eventos...). */
+function sendReadFailure(req: Request, res: Response, error: unknown, what: string): void {
+  const err = asHttpError(error)
+  console.error(`[${what}]`, err.message)
+  if (err.status === 401) return sessionExpired(req, res)
+  res.status(502).json({ error: err.message })
 }
 
 // ---------------------------------------------------------------------------
@@ -165,11 +198,12 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   if (!req.session) {
-    return res.status(401).json({
+    res.status(401).json({
       error: 'No has iniciado sesión',
       authConfigured: hasAppCredentials(),
       demoAvailable: true,
     })
+    return
   }
   res.json({
     user: req.session.user,
@@ -179,11 +213,10 @@ app.get('/api/auth/me', (req, res) => {
 })
 
 // Paso 1: redirigir a la pantalla de autorización de la intra.
-app.get('/api/auth/login', (req, res) => {
+app.get('/api/auth/login', (_req, res) => {
   if (!hasAppCredentials()) {
-    return res
-      .status(503)
-      .json({ error: 'Faltan FT_CLIENT_ID y FT_CLIENT_SECRET en el servidor (.env)' })
+    res.status(503).json({ error: 'Faltan FT_CLIENT_ID y FT_CLIENT_SECRET en el servidor (.env)' })
+    return
   }
   const state = randomUUID()
   setCookie(res, STATE_COOKIE, state, { maxAgeMs: 10 * 60 * 1000 })
@@ -196,9 +229,13 @@ app.get('/api/auth/callback', async (req, res) => {
   const expectedState = req.cookies[STATE_COOKIE]
   clearCookie(res, STATE_COOKIE)
 
-  if (error) return res.redirect(`${APP_URL}/?auth_error=${encodeURIComponent(error)}`)
-  if (!code || !state || state !== expectedState) {
-    return res.redirect(`${APP_URL}/?auth_error=state`)
+  if (typeof error === 'string' && error) {
+    res.redirect(`${APP_URL}/?auth_error=${encodeURIComponent(error)}`)
+    return
+  }
+  if (typeof code !== 'string' || !code || typeof state !== 'string' || state !== expectedState) {
+    res.redirect(`${APP_URL}/?auth_error=state`)
+    return
   }
 
   try {
@@ -209,7 +246,7 @@ app.get('/api/auth/callback', async (req, res) => {
     setCookie(res, SESSION_COOKIE, id, { maxAgeMs: 7 * 24 * 60 * 60 * 1000 })
     res.redirect(`${APP_URL}/`)
   } catch (err) {
-    console.error('[auth/callback]', err.message)
+    console.error('[auth/callback]', asHttpError(err).message)
     res.redirect(`${APP_URL}/?auth_error=exchange`)
   }
 })
@@ -219,7 +256,7 @@ app.get('/api/auth/callback', async (req, res) => {
 // entrada empieza con un estado limpio, propio de la sesión.
 app.post('/api/auth/demo', (req, res) => {
   destroySession(req.sessionId)
-  const user = {
+  const user: SessionUser = {
     id: 0,
     login: 'demo',
     displayName: 'Estudiante demo',
@@ -255,16 +292,19 @@ app.get('/api/agenda', requireSession, async (req, res) => {
   const to = parseDate(req.query.to, new Date(now.getTime() + 60 * 86_400_000))
 
   if (!from || !to) {
-    return res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
+    res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
+    return
   }
   if (to <= from) {
-    return res.status(400).json({ error: '"to" debe ser posterior a "from"' })
+    res.status(400).json({ error: '"to" debe ser posterior a "from"' })
+    return
   }
 
-  const session = req.session
+  const session = sessionOf(req)
   const campusId = session.user.campusId ?? DEFAULT_CAMPUS_ID
   if (session.demo) {
-    return res.json({ source: 'mock', campusId, ...mockAgenda(demoStateOf(session), { from, to }) })
+    res.json({ source: 'mock', campusId, ...mockAgenda(demoStateOf(session), { from, to }) })
+    return
   }
 
   const range = `${from.toISOString()}:${to.toISOString()}`
@@ -289,9 +329,7 @@ app.get('/api/agenda', requireSession, async (req, res) => {
       ...mergeAgenda(campus.value, personal.value),
     })
   } catch (err) {
-    console.error('[agenda]', err.message)
-    if (err.status === 401) return sessionExpired(req, res)
-    res.status(502).json({ error: err.message })
+    sendReadFailure(req, res, err, 'agenda')
   }
 })
 
@@ -306,8 +344,11 @@ app.get('/api/agenda', requireSession, async (req, res) => {
  * Respuesta: { projects: [...] }
  */
 app.get('/api/projects', requireSession, async (req, res) => {
-  const session = req.session
-  if (session.demo) return res.json({ projects: mockProjects() })
+  const session = sessionOf(req)
+  if (session.demo) {
+    res.json({ projects: mockProjects() })
+    return
+  }
 
   try {
     const token = await validAccessToken(session)
@@ -315,7 +356,8 @@ app.get('/api/projects', requireSession, async (req, res) => {
       fetchMyProjects(token, { userId: session.user.id, cursusId: session.user.cursusId ?? null }),
     )
     res.json({ projects: value })
-  } catch (err) {
+  } catch (error) {
+    const err = asHttpError(error)
     console.error('[projects]', err.message)
     if (err.status === 401) return sessionExpired(req, res)
     const message =
@@ -335,8 +377,14 @@ app.get('/api/projects', requireSession, async (req, res) => {
  * libres que consultó (tras apuntarse a algo, crear o borrar un slot, o
  * reservar una corrección). Lo del campus no cambia con esas acciones.
  */
-function forgetPersonal(userId) {
+function forgetPersonal(userId: number): void {
   cache.forget((key) => key.startsWith(`personal:${userId}:`) || key.startsWith(`pslots:${userId}:`))
+}
+
+/** Id numérico positivo de un parámetro de ruta, o null. */
+function idParam(req: Request): number | null {
+  const id = Number(req.params.id)
+  return Number.isInteger(id) && id > 0 ? id : null
 }
 
 /**
@@ -346,15 +394,16 @@ function forgetPersonal(userId) {
  * la intra no dejó releer el evento). Si la intra rechaza la operación
  * (aforo completo, plazo de cancelación...), 409 con su motivo.
  */
-async function setSubscription(req, res, subscribed) {
-  const eventId = Number(req.params.id)
-  if (!Number.isInteger(eventId) || eventId <= 0) {
-    return res.status(400).json({ error: 'Id de evento inválido' })
+async function setSubscription(req: Request, res: Response, subscribed: boolean): Promise<void> {
+  const eventId = idParam(req)
+  if (eventId == null) {
+    res.status(400).json({ error: 'Id de evento inválido' })
+    return
   }
-  const session = req.session
+  const session = sessionOf(req)
 
   try {
-    let event = null
+    let event: AgendaItem | null = null
     if (session.demo) {
       mockSetSubscription(demoStateOf(session), eventId, subscribed)
       saveSession()
@@ -383,14 +432,16 @@ async function setSubscription(req, res, subscribed) {
  * Respuesta: { ok, items } con los bloques creados ya fusionados.
  */
 app.post('/api/slots', requireSession, async (req, res) => {
-  const begin = parseDate(req.body?.beginAt, null)
-  const end = parseDate(req.body?.endAt, null)
+  const body = bodyOf(req)
+  const begin = parseDate(body.beginAt, null)
+  const end = parseDate(body.endAt, null)
   if (!begin || !end || end <= begin) {
-    return res.status(400).json({ error: 'Franja inválida: hacen falta beginAt y endAt (ISO), con fin posterior al inicio' })
+    res.status(400).json({ error: 'Franja inválida: hacen falta beginAt y endAt (ISO), con fin posterior al inicio' })
+    return
   }
-  const session = req.session
+  const session = sessionOf(req)
   try {
-    let items
+    let items: AgendaItem[]
     if (session.demo) {
       if (rejectDemoOverlap(res, session, begin, end)) return
       items = mockCreateSlot(demoStateOf(session), { begin, end })
@@ -412,11 +463,13 @@ app.post('/api/slots', requireSession, async (req, res) => {
 
 /** DELETE /api/slots  { ids: [...] }  → borra bloques de slot propios. */
 app.delete('/api/slots', requireSession, async (req, res) => {
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number) : []
+  const raw = bodyOf(req).ids
+  const ids = Array.isArray(raw) ? raw.map(Number) : []
   if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
-    return res.status(400).json({ error: 'Hacen falta los ids de los bloques del slot' })
+    res.status(400).json({ error: 'Hacen falta los ids de los bloques del slot' })
+    return
   }
-  const session = req.session
+  const session = sessionOf(req)
   try {
     if (session.demo) {
       mockDeleteSlots(demoStateOf(session), ids)
@@ -436,18 +489,23 @@ app.delete('/api/slots', requireSession, async (req, res) => {
  * para corregir ese proyecto. Respuesta: { items } (type 'free').
  */
 app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
-  const projectId = Number(req.params.id)
+  const projectId = idParam(req)
   const now = new Date()
   const from = parseDate(req.query.from, now)
   const to = parseDate(req.query.to, new Date(now.getTime() + 30 * 86_400_000))
-  if (!Number.isInteger(projectId) || projectId <= 0) {
-    return res.status(400).json({ error: 'Id de proyecto inválido' })
+  if (projectId == null) {
+    res.status(400).json({ error: 'Id de proyecto inválido' })
+    return
   }
   if (!from || !to || to <= from) {
-    return res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
+    res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
+    return
   }
-  const session = req.session
-  if (session.demo) return res.json({ items: mockProjectSlots({ projectId, from, to }) })
+  const session = sessionOf(req)
+  if (session.demo) {
+    res.json({ items: mockProjectSlots({ projectId, from, to }) })
+    return
+  }
 
   try {
     const token = await validAccessToken(session)
@@ -468,16 +526,18 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
  * → reserva una corrección del proyecto en ese instante.
  */
 app.post('/api/corrections', requireSession, async (req, res) => {
-  const projectId = Number(req.body?.projectId)
-  const teamId = Number(req.body?.teamId)
-  const begin = parseDate(req.body?.beginAt, null)
-  const correctorId = req.body?.correctorId ? Number(req.body.correctorId) : null
+  const body = bodyOf(req)
+  const projectId = Number(body.projectId)
+  const teamId = Number(body.teamId)
+  const begin = parseDate(body.beginAt, null)
+  const correctorId = body.correctorId ? Number(body.correctorId) : null
   if (!Number.isInteger(projectId) || projectId <= 0 || !Number.isInteger(teamId) || teamId <= 0 || !begin) {
-    return res.status(400).json({ error: 'Hacen falta projectId, teamId y beginAt (ISO)' })
+    res.status(400).json({ error: 'Hacen falta projectId, teamId y beginAt (ISO)' })
+    return
   }
-  const session = req.session
+  const session = sessionOf(req)
   try {
-    let item = null
+    let item: AgendaItem | null = null
     if (session.demo) {
       if (rejectDemoOverlap(res, session, begin, new Date(begin.getTime() + 30 * 60_000))) return
       item = mockBookCorrection(demoStateOf(session), { projectId, beginAt: begin })
@@ -506,17 +566,18 @@ app.post('/api/corrections', requireSession, async (req, res) => {
  * exámenes por la API mientras el staff no autorice la aplicación, así que con
  * una sesión real responde 403 con ese motivo.
  */
-async function setExamSubscription(req, res, subscribed) {
-  const examId = Number(req.params.id)
-  if (!Number.isInteger(examId) || examId <= 0) {
-    return res.status(400).json({ error: 'Id de examen inválido' })
+function setExamSubscription(req: Request, res: Response, subscribed: boolean): void {
+  const examId = idParam(req)
+  if (examId == null) {
+    res.status(400).json({ error: 'Id de examen inválido' })
+    return
   }
-  const session = req.session
+  const session = sessionOf(req)
   if (!session.demo) {
-    return res.status(403).json({
-      error:
-        'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.',
+    res.status(403).json({
+      error: 'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.',
     })
+    return
   }
   mockSetExamSubscription(demoStateOf(session), examId, subscribed)
   saveSession()
@@ -538,7 +599,7 @@ app.delete('/api/events/:id/subscription', requireSession, (req, res) => setSubs
  * Respuesta: { cache, items }
  */
 app.get('/api/events/upcoming', requireSession, async (req, res) => {
-  const session = req.session
+  const session = sessionOf(req)
   const campusId = session.user.campusId ?? DEFAULT_CAMPUS_ID
   // Desde el inicio del día (clave de caché estable durante el día) a un año.
   const from = new Date()
@@ -547,7 +608,8 @@ app.get('/api/events/upcoming', requireSession, async (req, res) => {
 
   if (session.demo) {
     const { items } = mockAgenda(demoStateOf(session), { from, to })
-    return res.json({ items: items.filter((it) => it.type === 'event') })
+    res.json({ items: items.filter((it) => it.type === 'event') })
+    return
   }
 
   const range = `${from.toISOString()}:${to.toISOString()}`
@@ -564,12 +626,10 @@ app.get('/api/events/upcoming', requireSession, async (req, res) => {
     const myIds = new Set(mine.value)
     res.json({
       cache: { events: events.state, mine: mine.state },
-      items: events.value.map((it) => ({ ...it, subscribed: myIds.has(it.eventId) })),
+      items: events.value.map((it) => ({ ...it, subscribed: myIds.has(it.eventId ?? -1) })),
     })
   } catch (err) {
-    console.error('[events/upcoming]', err.message)
-    if (err.status === 401) return sessionExpired(req, res)
-    res.status(502).json({ error: err.message })
+    sendReadFailure(req, res, err, 'events/upcoming')
   }
 })
 

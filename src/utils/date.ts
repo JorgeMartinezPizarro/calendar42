@@ -1,42 +1,38 @@
 export const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
-export function isSameDay(a, b) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
+export function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
-export function addMonths(date, delta) {
+export function addMonths(date: Date, delta: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1)
 }
 
-export function startOfDay(date) {
+export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
-export function addDays(date, delta) {
+export function addDays(date: Date, delta: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + delta)
 }
 
 /** Clave local 'YYYY-MM-DD', útil para agrupar eventos por día. */
-export function toDateKey(date) {
+export function toDateKey(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
 
-export function capitalize(text) {
+export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-export function formatMonthYear(date) {
+export function formatMonthYear(date: Date): string {
   return capitalize(date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }))
 }
 
-export function formatLongDate(date) {
+export function formatLongDate(date: Date): string {
   return capitalize(
     date.toLocaleDateString('es-ES', {
       weekday: 'long',
@@ -47,31 +43,36 @@ export function formatLongDate(date) {
   )
 }
 
-export function formatTime(date) {
+export function formatTime(date: Date): string {
   return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 }
 
 /** "mié, 15 oct" */
-export function formatShortDay(date) {
+export function formatShortDay(date: Date): string {
   return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 /** Franja horaria: "mié, 15 oct · 18:00–20:00"; si cruza días, con ambas fechas. */
-export function formatRange(begin, end) {
+export function formatRange(begin: Date, end: Date): string {
   if (isSameDay(begin, end)) {
     return `${formatShortDay(begin)} · ${formatTime(begin)}–${formatTime(end)}`
   }
   return `${formatShortDay(begin)} ${formatTime(begin)} – ${formatShortDay(end)} ${formatTime(end)}`
 }
 
+export interface MonthCell {
+  date: Date
+  /** El día es del mes mostrado (no del anterior ni del siguiente). */
+  inMonth: boolean
+}
+
 /**
- * Builds the grid of days for a month view.
- * Weeks start on Monday. Returns a flat array of 42 cells (6 weeks),
- * each with the date and whether it belongs to the displayed month.
+ * Rejilla de días de un mes: 42 celdas (6 semanas), empezando en lunes, con
+ * los días del mes anterior y el siguiente para completar las semanas.
  */
-export function getMonthGrid(year, month) {
+export function getMonthGrid(year: number, month: number): MonthCell[] {
   const firstOfMonth = new Date(year, month, 1)
-  // getDay(): 0 = Sunday ... 6 = Saturday. Shift so Monday = 0.
+  // getDay(): 0 = domingo ... 6 = sábado. Se desplaza para que el lunes sea 0.
   const offset = (firstOfMonth.getDay() + 6) % 7
   const gridStart = new Date(year, month, 1 - offset)
 
@@ -82,7 +83,7 @@ export function getMonthGrid(year, month) {
 }
 
 /** Rango [start, end) que cubre todas las celdas visibles de la rejilla del mes. */
-export function getMonthGridRange(year, month) {
+export function getMonthGridRange(year: number, month: number): { start: Date; end: Date } {
   const cells = getMonthGrid(year, month)
   const start = cells[0].date
   const end = addDays(cells[cells.length - 1].date, 1)

@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
+import type { Item, Loadable, Project } from '../types.ts'
 import './ProjectPicker.css'
 
-const STATUS_LABELS = {
+const STATUS_LABELS: Record<string, string> = {
   waiting_for_correction: 'Cerrado, pendiente de corrección',
   in_progress: 'En curso',
   searching_a_group: 'Buscando grupo',
@@ -9,18 +10,18 @@ const STATUS_LABELS = {
 }
 
 // Grupos del desplegable, en este orden. Solo el primero es seleccionable.
-const GROUPS = [
+const GROUPS: { key: string; label: string; match: (p: Project) => boolean }[] = [
   { key: 'closed', label: 'Cerrados, listos para corrección', match: (p) => p.closed },
   { key: 'open', label: 'En curso, aún sin cerrar', match: (p) => !p.closed },
 ]
 
-function describe(p) {
+function describe(p: Project): string {
   const status = STATUS_LABELS[p.status] ?? p.status
   if (p.closed) return `${status}.`
   return `${status}. Hasta que cierres el proyecto no se puede agendar su corrección.`
 }
 
-function describeFreeSlots(freeSlots) {
+function describeFreeSlots(freeSlots: Loadable<Item>): string {
   if (freeSlots.status === 'loading') return 'Buscando slots libres…'
   if (freeSlots.error) return freeSlots.error
   const n = freeSlots.items.length
@@ -28,15 +29,24 @@ function describeFreeSlots(freeSlots) {
   return `${n} franja${n === 1 ? '' : 's'} libre${n === 1 ? '' : 's'} este mes, en el calendario y en las horas del día. Pulsa una para agendar la corrección.`
 }
 
+interface ProjectPickerProps {
+  /** Lo que devuelve /api/projects. */
+  projects?: Project[]
+  status: Loadable<Project>['status']
+  /** Mensaje si falló la carga. */
+  error?: string | null
+  /** Proyecto elegido (id del projects_user). */
+  selectedId?: number | null
+  onSelect: (id: number | null) => void
+  /** Slots libres del elegido, o null. */
+  freeSlots?: Loadable<Item> | null
+}
+
 /**
  * Desplegable con los proyectos del alumno aún sin terminar. Solo se pueden
  * elegir los cerrados (pendientes de corrección); los que siguen en curso
  * aparecen desactivados. Los finalizados no se listan. Para el elegido, el
  * estado de sus slots libres.
- * - projects: lo que devuelve /api/projects
- * - status: 'idle' | 'loading' | 'error'; error: mensaje si falló la carga
- * - selectedId / onSelect(id | null): proyecto elegido (id del projects_user)
- * - freeSlots: { status, items, error } de los slots libres del elegido, o null
  */
 function ProjectPicker({
   projects = [],
@@ -45,7 +55,7 @@ function ProjectPicker({
   selectedId = null,
   onSelect,
   freeSlots = null,
-}) {
+}: ProjectPickerProps) {
   const listed = useMemo(() => projects.filter((p) => p.status !== 'finished'), [projects])
   const groups = useMemo(
     () => GROUPS.map((g) => ({ ...g, items: listed.filter(g.match) })).filter((g) => g.items.length),
@@ -54,7 +64,7 @@ function ProjectPicker({
   const selected = listed.find((p) => p.id === selectedId) ?? null
   const closedCount = listed.filter((p) => p.closed).length
 
-  let body
+  let body: ReactNode
   if (error) {
     body = <p className="projects__empty projects__empty--error">{error}</p>
   } else if (status === 'loading' && projects.length === 0) {

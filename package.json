@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,green \"npm:dev:web\" \"npm:dev:api\"",
     "dev:web": "vite",
-    "dev:api": "nodemon -L --watch server --watch .env --ignore server/.sessions.json server/index.js",
-    "start:api": "node server/index.js",
-    "build": "vite build",
+    "dev:api": "nodemon -L --watch server --watch shared --watch .env --ext ts,json --ignore server/.sessions.json --exec \"node server/index.ts\"",
+    "start:api": "node server/index.ts",
+    "build": "npm run typecheck && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json && tsc -p server/tsconfig.json"
   },
   "dependencies": {
     "dompurify": "^3.4.16",
@@ -22,6 +23,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
@@ -32,6 +35,8 @@
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
     "nodemon": "^3.1.14",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
     "vite": "^5.4.10"
   }
 }

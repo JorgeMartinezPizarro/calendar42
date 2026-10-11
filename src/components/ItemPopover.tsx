@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { itemColor } from '../agendaTypes.js'
-import { MIN_SLOT_MINUTES } from '../subscription.js'
-import { formatRange, formatTime } from '../utils/date.js'
-import Markdown from './Markdown.jsx'
+import { itemColor } from '../agendaTypes.ts'
+import { MIN_SLOT_MINUTES, type BookingState, type ButtonState, type SubscriptionState } from '../subscription.ts'
+import type { ActionState, Item, ItemType, Project } from '../types.ts'
+import { formatRange, formatTime } from '../utils/date.ts'
+import Markdown from './Markdown.tsx'
 import './ItemPopover.css'
 
-const TYPE_LABELS = {
+const TYPE_LABELS: Record<ItemType, string> = {
   event: 'Evento',
   exam: 'Examen',
   slot: 'Slot de corrección',
@@ -14,7 +15,7 @@ const TYPE_LABELS = {
 }
 
 // Subtipos de evento de la intra.
-const KIND_LABELS = {
+const KIND_LABELS: Record<string, string> = {
   conference: 'Conferencia',
   meetup: 'Meetup',
   workshop: 'Taller',
@@ -29,13 +30,13 @@ const KIND_LABELS = {
   pedago: 'Pedagogía',
 }
 
-function headline(item) {
+function headline(item: Item): string {
   const type = TYPE_LABELS[item.type] ?? item.type
   const kind = item.kind && item.kind !== item.type ? (KIND_LABELS[item.kind] ?? item.kind) : null
   return kind ? `${type} · ${kind}` : type
 }
 
-function capacity(item) {
+function capacity(item: Item): string | null {
   if (item.type !== 'event' && item.type !== 'exam') return null
   const n = item.subscribers ?? 0
   const people = `${n} inscrito${n === 1 ? '' : 's'}`
@@ -46,13 +47,38 @@ function capacity(item) {
  * Horas de inicio posibles para una corrección dentro de una franja libre:
  * cada 15 min, dejando al menos la duración mínima hasta el final.
  */
-function startOptions(item) {
+function startOptions(item: Item): Date[] {
   const step = 15 * 60_000
   const begin = item.beginAt.getTime()
   const last = Math.max(begin, item.endAt.getTime() - MIN_SLOT_MINUTES * 60_000)
-  const options = []
+  const options: Date[] = []
   for (let t = begin; t <= last; t += step) options.push(new Date(t))
   return options
+}
+
+/** Reserva de una corrección en una franja libre. */
+export interface BookingInfo {
+  project: Project | null
+  /** Estado de la reserva (bookingState) empezando a esa hora. */
+  stateAt: (startAt: Date) => BookingState
+}
+
+interface ItemPopoverProps {
+  item: Item
+  /** subscriptionState(item), o null si no aplica. */
+  subscription?: SubscriptionState | null
+  /** Para franjas libres, o null. */
+  booking?: BookingInfo | null
+  /** slotDeleteState(item) para slots propios, o null. */
+  slotDelete?: ButtonState | null
+  /** Lo del usuario que se solapa (ver overlappingItems); null si no procede. */
+  conflicts?: Item[] | null
+  /** El envío en curso para este elemento, si lo hay. */
+  action?: ActionState | null
+  onToggleSubscription: (item: Item) => void
+  onBook: (item: Item, startAt: Date) => void
+  onDeleteSlot: (item: Item) => void
+  onClose: () => void
 }
 
 /**
@@ -60,12 +86,6 @@ function startOptions(item) {
  * apuntarse o borrarse (evento, examen), agendar una corrección (franja libre)
  * o borrar un slot propio. Llena el panel que le reserva la vista del día (a
  * pantalla completa en móvil) y se cierra con su botón o con Escape.
- * - subscription: subscriptionState(item), o null si no aplica
- * - booking: { project, stateAt(startAt) } para franjas libres, o null. stateAt
- *   da el estado de la reserva (bookingState) empezando a esa hora.
- * - slotDelete: slotDeleteState(item) para slots propios, o null
- * - conflicts: lo del usuario que se solapa (ver overlappingItems); null si no procede
- * - action: { busy, error } del envío en curso para este elemento, si lo hay
  */
 function ItemPopover({
   item,
@@ -73,13 +93,13 @@ function ItemPopover({
   booking = null,
   slotDelete = null,
   conflicts = null,
-  action,
+  action = null,
   onToggleSubscription,
   onBook,
   onDeleteSlot,
   onClose,
-}) {
-  const ref = useRef(null)
+}: ItemPopoverProps) {
+  const ref = useRef<HTMLDivElement>(null)
   const starts = useMemo(() => (item.type === 'free' ? startOptions(item) : []), [item])
   // Por defecto, la primera hora de la franja que no choca con la agenda.
   const firstFreeStart = booking
@@ -100,7 +120,7 @@ function ItemPopover({
   }, [item.id, item.beginAt])
 
   useEffect(() => {
-    const onKey = (e) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
@@ -114,7 +134,7 @@ function ItemPopover({
   const hasActions = Boolean(subscription || booking || slotDelete || conflicts || item.signupUrl)
   const bookingNow = booking ? booking.stateAt(startAt) : null
 
-  const feedback = (reason) => (
+  const feedback = (reason: string | null) => (
     <>
       {reason && !action?.error && <span className="popover__reason">{reason}</span>}
       {action?.error && (
@@ -197,7 +217,7 @@ function ItemPopover({
             </a>
           )}
 
-          {booking && (
+          {booking && bookingNow && (
             <>
               {starts.length > 1 && (
                 <label className="popover__start">
@@ -245,11 +265,7 @@ function ItemPopover({
           {conflicts && (
             <span
               className={`popover__slot popover__slot--${slotBusy ? 'busy' : 'free'}`}
-              title={
-                slotBusy
-                  ? 'Se solapa con algo de tu agenda'
-                  : 'No se solapa con nada de tu agenda'
-              }
+              title={slotBusy ? 'Se solapa con algo de tu agenda' : 'No se solapa con nada de tu agenda'}
             >
               {slotBusy ? 'Slot ocupado' : 'Slot libre'}
             </span>
@@ -259,13 +275,10 @@ function ItemPopover({
         </div>
       )}
 
-      {slotBusy && (
+      {conflicts && slotBusy && (
         <p className="popover__conflicts">
           Solapa con{' '}
-          {conflicts
-            .map((c) => `${c.name} (${formatTime(c.beginAt)}–${formatTime(c.endAt)})`)
-            .join(', ')}
-          .
+          {conflicts.map((c) => `${c.name} (${formatTime(c.beginAt)}–${formatTime(c.endAt)})`).join(', ')}.
         </p>
       )}
     </div>

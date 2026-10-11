@@ -15,6 +15,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
+COPY shared ./shared
 COPY --from=build /app/dist ./dist
 
 # Las sesiones (tokens de la intra) van a un volumen, fuera del código.
@@ -28,4 +29,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- http://localhost:3000/api/health > /dev/null || exit 1
 
-CMD ["node", "server/index.js"]
+# Node ejecuta el TypeScript del servidor directamente (sin compilar).
+CMD ["node", "server/index.ts"]

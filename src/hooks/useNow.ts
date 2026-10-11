@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 /** Hora actual, actualizada cada `intervalMs`. */
-export function useNow(intervalMs = 60_000) {
+export function useNow(intervalMs = 60_000): Date {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), intervalMs)

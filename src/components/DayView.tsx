@@ -1,7 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { itemColor } from '../agendaTypes.js'
-import { useNow } from '../hooks/useNow.js'
-import { MIN_SLOT_MINUTES } from '../subscription.js'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react'
+import { itemColor } from '../agendaTypes.ts'
+import { useNow } from '../hooks/useNow.ts'
+import { MIN_SLOT_MINUTES } from '../subscription.ts'
+import type { Item, Loadable, TimeRange } from '../types.ts'
 import {
   addDays,
   capitalize,
@@ -10,7 +20,8 @@ import {
   formatTime,
   isSameDay,
   startOfDay,
-} from '../utils/date.js'
+} from '../utils/date.ts'
+import type { SlotEdge } from './SlotCreator.tsx'
 import './DayView.css'
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
@@ -24,37 +35,54 @@ const TAP_TOLERANCE_PX = 10
 // Por debajo de esta duración no caben dos líneas: nombre y hora van en una.
 const COMPACT_MINUTES = 45
 
-function pad(n) {
+/** Franja en minutos desde el inicio del día. */
+interface MinuteRange {
+  startMin: number
+  endMin: number
+}
+
+interface LaidOutItem extends MinuteRange {
+  item: Item
+  lane: number
+  lanes: number
+}
+
+function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
 
-function formatMinutes(min) {
+function formatMinutes(min: number): string {
   return `${pad(Math.floor(min / 60))}:${pad(min % 60)}`
+}
+
+/** Minutos desde `dayStart` hasta `date`. */
+function minutesFrom(dayStart: Date, date: Date): number {
+  return (date.getTime() - dayStart.getTime()) / 60_000
 }
 
 /**
  * Recorta los elementos al día, calcula su posición vertical (en % del día) y
  * los reparte en carriles para que los que se solapan no se tapen.
  */
-function layoutItems(items, date) {
+function layoutItems(items: Item[], date: Date): LaidOutItem[] {
   const dayStart = startOfDay(date)
   const dayEnd = addDays(dayStart, 1)
 
   const laidOut = items
     .filter((e) => e.beginAt < dayEnd && e.endAt > dayStart)
-    .map((e) => {
+    .map((e): LaidOutItem => {
       const start = e.beginAt < dayStart ? dayStart : e.beginAt
       const end = e.endAt > dayEnd ? dayEnd : e.endAt
-      const startMin = (start - dayStart) / 60_000
-      const endMin = Math.max(startMin + 20, (end - dayStart) / 60_000) // mínimo visible
+      const startMin = minutesFrom(dayStart, start)
+      const endMin = Math.max(startMin + 20, minutesFrom(dayStart, end)) // mínimo visible
       return { item: e, startMin, endMin, lane: 0, lanes: 1 }
     })
     .sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin)
 
   // Asignación de carriles por grupos de solapamiento.
-  let group = []
+  let group: LaidOutItem[] = []
   let groupEnd = -1
-  const laneEnds = []
+  const laneEnds: number[] = []
 
   const closeGroup = () => {
     const lanes = laneEnds.length || 1
@@ -77,7 +105,7 @@ function layoutItems(items, date) {
   return laidOut
 }
 
-function itemMeta(item) {
+function itemMeta(item: Item): string {
   const time = `${formatTime(item.beginAt)} – ${formatTime(item.endAt)}`
   switch (item.type) {
     case 'slot':
@@ -91,25 +119,46 @@ function itemMeta(item) {
   }
 }
 
-/**
- * Vista diaria por horas.
- * - panel: ficha de un elemento. Mientras hay ficha, las horas desaparecen y
- *   la ficha ocupa su sitio (en móvil, toda la pantalla, por CSS).
- * - openItemId: id del elemento cuya ficha está abierta, para resaltarlo.
- * - onOpenItem(item): abrir la ficha (clic, Enter o Espacio).
- * - selectable: modo "Crear slots". Cada gesto decide por su tipo de puntero:
- *   con ratón, arrastrar sobre las horas marca una franja (bloques de 15 min);
- *   con el dedo, un toque marca una hora y deslizar sigue haciendo scroll.
- *   No depende de detectar el dispositivo. La franja marcada
- *   (draft) lleva tiradores arriba y abajo para ajustarla. Cada cambio llama a
- *   onRangeSelect({ beginAt, endAt }).
- * - onShiftDay(delta): flechas de día anterior y siguiente.
- * - onBack: botón "‹ Mes" para volver al calendario (el CSS solo lo muestra en móvil).
- * - onCancelSelect: botón "Cancelar" junto a la instrucción de crear slots,
- *   para salir de la creación sin crear nada.
- * - footer: contenido fijo bajo las horas, el panel de crear slot (el CSS solo
- *   lo muestra en móvil; en escritorio está en la columna izquierda).
- */
+interface DayViewProps {
+  date: Date
+  items?: Item[]
+  status: Loadable<Item>['status']
+  /**
+   * Ficha de un elemento. Mientras hay ficha, las horas desaparecen y la ficha
+   * ocupa su sitio (en móvil, toda la pantalla, por CSS).
+   */
+  panel?: ReactNode
+  /** Id del elemento cuya ficha está abierta, para resaltarlo. */
+  openItemId?: string | null
+  /** Abrir la ficha (clic, Enter o Espacio). */
+  onOpenItem: (item: Item) => void
+  /**
+   * Modo "Crear slots". Cada gesto decide por su tipo de puntero: con ratón,
+   * arrastrar sobre las horas marca una franja (bloques de 15 min); con el
+   * dedo, un toque marca una hora y deslizar sigue haciendo scroll. No depende
+   * de detectar el dispositivo. La franja marcada (draft) lleva tiradores
+   * arriba y abajo para ajustarla. Cada cambio llama a onRangeSelect.
+   */
+  selectable?: boolean
+  draft?: TimeRange | null
+  onRangeSelect?: (range: TimeRange) => void
+  /** Flechas de día anterior y siguiente. */
+  onShiftDay?: (delta: number) => void
+  /** Botón "‹ Mes" para volver al calendario (el CSS solo lo muestra en móvil). */
+  onBack?: () => void
+  /**
+   * Botón "Cancelar" junto a la instrucción de crear slots, para salir de la
+   * creación sin crear nada.
+   */
+  onCancelSelect?: () => void
+  /**
+   * Contenido fijo bajo las horas, el panel de crear slot (el CSS solo lo
+   * muestra en móvil; en escritorio está en la columna izquierda).
+   */
+  footer?: ReactNode
+}
+
+/** Vista diaria por horas. */
 function DayView({
   date,
   items = [],
@@ -124,13 +173,15 @@ function DayView({
   onBack,
   onCancelSelect,
   footer = null,
-}) {
+}: DayViewProps) {
   const now = useNow()
-  const scrollRef = useRef(null)
-  const hoursRef = useRef(null)
-  const tapRef = useRef(null) // { x, y } del toque en curso (táctil)
-  const [drag, setDrag] = useState(null) // { anchor, startMin, endMin } mientras se arrastra (ratón)
-  const [resize, setResize] = useState(null) // { edge, startMin, endMin } mientras se mueve un tirador
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const hoursRef = useRef<HTMLDivElement>(null)
+  const tapRef = useRef<{ x: number; y: number } | null>(null) // toque en curso (táctil)
+  // Mientras se arrastra con el ratón.
+  const [drag, setDrag] = useState<(MinuteRange & { anchor: number }) | null>(null)
+  // Mientras se mueve un tirador.
+  const [resize, setResize] = useState<(MinuteRange & { edge: SlotEdge }) | null>(null)
   const isToday = isSameDay(date, now)
   const nowOffsetPct = ((now.getHours() * 60 + now.getMinutes()) / MINUTES_PER_DAY) * 100
   const laidOut = layoutItems(items, date)
@@ -140,7 +191,7 @@ function DayView({
   // actual (hoy) o a una hora razonable de la mañana, no a las 00:00. Si las
   // horas aún no tienen tamaño (recién entrado, o ocultas en la vista Mes del
   // móvil), el scroll queda pendiente y se aplica en cuanto lo tengan.
-  const scrollTargetRef = useRef(null)
+  const scrollTargetRef = useRef<number | null>(null)
 
   const applyPendingScroll = useCallback(() => {
     const container = scrollRef.current
@@ -172,7 +223,7 @@ function DayView({
     )
   }
 
-  const openWithKeyboard = (item) => (e) => {
+  const openWithKeyboard = (item: Item) => (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       onOpenItem(item)
@@ -182,21 +233,23 @@ function DayView({
   // ---- marcar una franja (modo "Crear slots") -------------------------------
   const dayStart = startOfDay(date)
 
-  const minutesAt = (clientY, round = Math.round) => {
-    const rect = hoursRef.current.getBoundingClientRect()
+  const minutesAt = (clientY: number, round: (x: number) => number = Math.round): number => {
+    const hours = hoursRef.current
+    if (!hours) return 0
+    const rect = hours.getBoundingClientRect()
     const raw = ((clientY - rect.top) / rect.height) * MINUTES_PER_DAY
     const snapped = round(raw / SNAP_MINUTES) * SNAP_MINUTES
     return Math.max(0, Math.min(MINUTES_PER_DAY, snapped))
   }
 
-  const commit = (startMin, endMin) =>
+  const commit = (startMin: number, endMin: number) =>
     onRangeSelect?.({
       beginAt: new Date(dayStart.getTime() + startMin * 60_000),
       endAt: new Date(dayStart.getTime() + endMin * 60_000),
     })
 
-  const onPointerDown = (e) => {
-    if (!selectable || e.target.closest('.dayview__event, .dayview__handle')) return
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (!selectable || (e.target as Element).closest('.dayview__event, .dayview__handle')) return
     // Dedo o lápiz: sin preventDefault, para que las horas sigan haciendo
     // scroll; si se suelta casi en el mismo sitio, es un toque.
     if (e.pointerType !== 'mouse') {
@@ -206,7 +259,7 @@ function DayView({
     if (e.button !== 0) return
     e.preventDefault()
     try {
-      hoursRef.current.setPointerCapture(e.pointerId)
+      e.currentTarget.setPointerCapture(e.pointerId)
     } catch {
       // Sin captura el arrastre sigue funcionando mientras el puntero esté sobre la rejilla.
     }
@@ -214,7 +267,7 @@ function DayView({
     setDrag({ anchor: m, startMin: m, endMin: m + MIN_SLOT_MINUTES })
   }
 
-  const onPointerMove = (e) => {
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag) return
     const m = minutesAt(e.clientY)
     setDrag((d) => {
@@ -226,7 +279,7 @@ function DayView({
     })
   }
 
-  const onPointerUp = (e) => {
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     if (drag) {
       commit(drag.startMin, drag.endMin)
       setDrag(null)
@@ -247,20 +300,20 @@ function DayView({
   }
 
   // Franja en punteado: la que se está arrastrando o ajustando, o la pendiente de crear.
-  let draftBlock = null
+  let draftBlock: MinuteRange | null = null
   if (drag) {
     draftBlock = { startMin: drag.startMin, endMin: drag.endMin }
   } else if (resize) {
     draftBlock = { startMin: resize.startMin, endMin: resize.endMin }
   } else if (draft && isSameDay(draft.beginAt, date)) {
     draftBlock = {
-      startMin: (draft.beginAt - dayStart) / 60_000,
-      endMin: Math.min(MINUTES_PER_DAY, (draft.endAt - dayStart) / 60_000),
+      startMin: minutesFrom(dayStart, draft.beginAt),
+      endMin: Math.min(MINUTES_PER_DAY, minutesFrom(dayStart, draft.endAt)),
     }
   }
 
   // Tiradores de la franja: arrastrarlos mueve el inicio o el fin.
-  const startResize = (edge) => (e) => {
+  const startResize = (edge: SlotEdge) => (e: PointerEvent<HTMLSpanElement>) => {
     if (!draftBlock) return
     e.stopPropagation()
     e.preventDefault()
@@ -272,14 +325,15 @@ function DayView({
     setResize({ edge, startMin: draftBlock.startMin, endMin: draftBlock.endMin })
   }
 
-  const moveResize = (e) => {
+  const moveResize = (e: PointerEvent<HTMLSpanElement>) => {
     if (!resize) return
     const m = minutesAt(e.clientY)
-    setResize((r) =>
-      r.edge === 'start'
+    setResize((r) => {
+      if (!r) return r
+      return r.edge === 'start'
         ? { ...r, startMin: Math.max(0, Math.min(m, r.endMin - MIN_SLOT_MINUTES)) }
-        : { ...r, endMin: Math.min(MINUTES_PER_DAY, Math.max(m, r.startMin + MIN_SLOT_MINUTES)) },
-    )
+        : { ...r, endMin: Math.min(MINUTES_PER_DAY, Math.max(m, r.startMin + MIN_SLOT_MINUTES)) }
+    })
   }
 
   const endResize = () => {
@@ -288,7 +342,7 @@ function DayView({
     setResize(null)
   }
 
-  const handleProps = (edge) => ({
+  const handleProps = (edge: SlotEdge): HTMLAttributes<HTMLSpanElement> => ({
     className: `dayview__handle dayview__handle--${edge}`,
     role: 'slider',
     'aria-label': edge === 'start' ? 'Inicio del slot' : 'Fin del slot',

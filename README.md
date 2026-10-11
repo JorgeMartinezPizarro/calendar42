@@ -188,12 +188,12 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 - Para reservar una corrección se consultan los slots libres del proyecto (`/v2/projects/:id/slots`) y se intenta crear el `scale_team` con la escala principal del proyecto y el corrector dueño del slot. Si la intra reserva esa acción al personal, el motivo aparece junto al botón.
 - La API tiene un límite de 2 peticiones por segundo y 1200 por hora, compartidos por todos los usuarios de la aplicación. Las llamadas pasan por un limitador y se cuentan: cerca del límite horario, la caché deja de renovar y sirve lo que tiene.
 - Para borrarse de un evento hace falta el id de la inscripción (`events_user`), no el del evento; se obtiene de `/v2/users/:id/events_users`. La intra valida aforo, fechas y plazo de cancelación: si rechaza la operación, la app muestra su motivo.
-- La caché (`server/cache.js`) separa lo compartido de lo personal: los eventos y exámenes del campus se guardan por campus y rango durante 15 minutos, y los slots, correcciones e inscripciones por usuario durante 5 (los proyectos 10 y los slots libres de un proyecto 2). Pasado ese tiempo se sirve lo caducado al instante y se renueva en segundo plano, así nadie espera a la intra salvo la primera vez. Lo personal se invalida con cada acción del usuario (apuntarse, crear o borrar un slot, reservar). `GET /api/health` muestra las llamadas de la última hora y el estado de la caché.
+- La caché (`server/cache.ts`) separa lo compartido de lo personal: los eventos y exámenes del campus se guardan por campus y rango durante 15 minutos, y los slots, correcciones e inscripciones por usuario durante 5 (los proyectos 10 y los slots libres de un proyecto 2). Pasado ese tiempo se sirve lo caducado al instante y se renueva en segundo plano, así nadie espera a la intra salvo la primera vez. Lo personal se invalida con cada acción del usuario (apuntarse, crear o borrar un slot, reservar). `GET /api/health` muestra las llamadas de la última hora y el estado de la caché.
 - El token de autenticación permanece en el backend y no se expone al navegador.
 
 ## Puesta en marcha
 
-Necesitas Node 22 y una aplicación OAuth registrada en:
+Necesitas Node 22.18 o superior (ejecuta el TypeScript del servidor directamente, sin compilar) y una aplicación OAuth registrada en:
 
 https://profile.intra.42.fr/oauth/applications
 
@@ -223,7 +223,16 @@ npm run dev
 La aplicación estará disponible en:
 
 - Web: `http://localhost:5173`
-- API: `http://localhost:3000`
+- API: `http://localhost:3112`
+
+Todo el código es TypeScript en modo estricto. Para comprobarlo:
+
+```bash
+npm run typecheck   # tipos del frontend y del servidor
+npm run lint
+```
+
+`npm run build` comprueba los tipos antes de compilar el frontend.
 
 El **modo demo con datos de ejemplo** está siempre disponible en la pantalla de login, también con credenciales: así se puede enseñar la aplicación aunque la intra esté caída o rechace las peticiones. Cada entrada al demo empieza limpia: lo que el visitante cambia (inscripciones, slots, reservas) va en su propia sesión, así que varios visitantes pueden probarlo a la vez sin pisarse.
 
@@ -264,14 +273,19 @@ El contenedor lee las credenciales del mismo `.env`. Como todo va por el puerto 
 
 ```text
 server/   Express: OAuth, sesiones y la API propia; en producción sirve
-          también dist/. intra.js habla con la API de 42
+          también dist/. intra.ts habla con la API de 42. Node lo ejecuta
+          tal cual; tsc solo comprueba los tipos (server/tsconfig.json)
+
+shared/   Tipos del contrato de la API, compartidos por servidor y frontend
 
 Dockerfile, docker-compose.yml, Makefile
           Imagen y ciclo de vida en Docker (make start | stop | logs | build)
 
 src/      React: Calendar, ModeBar (los cuatro modos), ProjectPicker, ItemList,
           SlotCreator, DayView (con arrastre para crear slots), ItemPopover,
-          LoginView; carga de datos y acciones sobre la intra en App.jsx
+          LoginView; carga de datos y acciones sobre la intra en App.tsx.
+          api/ llama a la API propia; subscription.ts tiene las reglas de
+          cada botón (qué se puede hacer y, si no, por qué)
 ```
 
 ## Evolución del producto

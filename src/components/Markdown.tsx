@@ -14,15 +14,19 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   }
 })
 
+interface MarkdownProps {
+  text: string | null | undefined
+  className?: string
+}
+
 /**
  * Texto en Markdown (las descripciones de la intra lo son, a veces con algo
  * de HTML) convertido a HTML y saneado antes de pintarlo.
  */
-function Markdown({ text, className = '' }) {
-  const html = useMemo(() => DOMPurify.sanitize(marked.parse(text ?? '')), [text])
-  return (
-    <div className={`markdown ${className}`.trim()} dangerouslySetInnerHTML={{ __html: html }} />
-  )
+function Markdown({ text, className = '' }: MarkdownProps) {
+  // Sin extensiones asíncronas, marked.parse devuelve el HTML directamente.
+  const html = useMemo(() => DOMPurify.sanitize(marked.parse(text ?? '', { async: false })), [text])
+  return <div className={`markdown ${className}`.trim()} dangerouslySetInnerHTML={{ __html: html }} />
 }
 
 export default Markdown

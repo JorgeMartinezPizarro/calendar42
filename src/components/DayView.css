@@ -197,7 +197,7 @@
   text-overflow: ellipsis;
 }
 
-/* El color base lo fija el tipo (--ev-color inline, ver agendaTypes.js).
+/* El color base lo fija el tipo (--ev-color inline, ver agendaTypes.ts).
    Matices por subtipo de evento de la intra. */
 .dayview__event--kind-rush { --ev-color: #ff9f43; }
 .dayview__event--kind-hackathon { --ev-color: #2d98da; }

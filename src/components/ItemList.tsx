@@ -1,14 +1,24 @@
-import { itemColor } from '../agendaTypes.js'
-import { formatRange } from '../utils/date.js'
+import { itemColor } from '../agendaTypes.ts'
+import type { Item, Loadable } from '../types.ts'
+import { formatRange } from '../utils/date.ts'
 import './ItemList.css'
+
+interface ItemListProps {
+  title: string
+  /** Ya filtrados (solo futuros) y ordenados por el padre. */
+  items: Item[]
+  status: Loadable<Item>['status']
+  emptyText: string
+  /** Id del elemento cuya ficha está abierta, para resaltarlo. */
+  openItemId?: string | null
+  onOpenItem: (item: Item) => void
+}
 
 /**
  * Lista de eventos o exámenes pendientes, con nombre y franja horaria. Al
  * pulsar uno se abre su ficha en el sitio de la vista del día.
- * - items: ya filtrados (solo futuros) y ordenados por el padre
- * - openItemId: id del elemento cuya ficha está abierta, para resaltarlo
  */
-function ItemList({ title, items, status, emptyText, openItemId = null, onOpenItem }) {
+function ItemList({ title, items, status, emptyText, openItemId = null, onOpenItem }: ItemListProps) {
   return (
     <section className="itemlist" aria-label={title}>
       <h2 className="itemlist__title">

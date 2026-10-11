@@ -1,16 +1,25 @@
 import { useState } from 'react'
-import { loginDemo, loginWith42 } from '../api/auth.js'
+import { loginDemo, loginWith42, type LoggedIn } from '../api/auth.ts'
+import { messageOf } from '../api/http.ts'
 import './LoginView.css'
 
-const AUTH_ERRORS = {
+// Motivos que deja el backend en ?auth_error=... si falla el login.
+const AUTH_ERRORS: Record<string, string> = {
   state: 'La respuesta de la intra no era válida. Inténtalo de nuevo.',
   exchange: 'No se pudo completar el inicio de sesión con la intra.',
   access_denied: 'Has cancelado la autorización en la intra.',
 }
 
-function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }) {
+interface LoginViewProps {
+  authConfigured: boolean
+  demoAvailable: boolean
+  authError: string | null | undefined
+  onLoggedIn: (result: LoggedIn) => void
+}
+
+function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }: LoginViewProps) {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(authError ? AUTH_ERRORS[authError] ?? authError : null)
+  const [error, setError] = useState<string | null>(authError ? (AUTH_ERRORS[authError] ?? authError) : null)
 
   const handleDemo = async () => {
     setBusy(true)
@@ -18,7 +27,7 @@ function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }) {
     try {
       onLoggedIn(await loginDemo())
     } catch (err) {
-      setError(err.message)
+      setError(messageOf(err))
       setBusy(false)
     }
   }
@@ -47,9 +56,8 @@ function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }) {
 
         {!authConfigured && (
           <p className="login__hint">
-            El servidor no tiene configurada la app OAuth de 42. Añade{' '}
-            <code>FT_CLIENT_ID</code> y <code>FT_CLIENT_SECRET</code> en <code>.env</code> para
-            iniciar sesión con la intra.
+            El servidor no tiene configurada la app OAuth de 42. Añade <code>FT_CLIENT_ID</code> y{' '}
+            <code>FT_CLIENT_SECRET</code> en <code>.env</code> para iniciar sesión con la intra.
           </p>
         )}
 

@@ -1,9 +1,11 @@
 // Datos de ejemplo para el modo demo (sin credenciales de la intra).
 // Se generan en relación al rango pedido para que siempre haya algo que ver.
 
+import type { AgendaCounts, AgendaItem, AgendaPayload, Coalition, Project } from '../shared/types.ts'
+
 // Las cuatro coaliciones clásicas de 42, con sus colores. En la intra cada
 // campus tiene las suyas; aquí solo sirven para ver el distintivo de la cabecera.
-export const DEMO_COALITIONS = [
+export const DEMO_COALITIONS: Coalition[] = [
   { id: 1, name: 'The Federation', slug: 'the-federation', color: '#00babc', image: null, cover: null },
   { id: 2, name: 'The Alliance', slug: 'the-alliance', color: '#4ebf8a', image: null, cover: null },
   { id: 3, name: 'The Order', slug: 'the-order', color: '#ff6950', image: null, cover: null },
@@ -11,7 +13,7 @@ export const DEMO_COALITIONS = [
 ]
 
 /** Una coalición al azar para cada sesión demo, así se ven los cuatro colores. */
-export function mockCoalition() {
+export function mockCoalition(): Coalition {
   return DEMO_COALITIONS[Math.floor(Math.random() * DEMO_COALITIONS.length)]
 }
 
@@ -19,13 +21,25 @@ export function mockCoalition() {
  * Estado de una sesión demo: lo que el visitante cambia desde la app. Va en su
  * propia sesión (objeto plano, se guarda con ella), así que cada entrada al
  * demo empieza limpia y varios visitantes no se pisan entre sí.
- * - subscriptions / examSubscriptions: id de evento o examen -> inscrito
- *   (en la intra real un estudiante no puede inscribirse a exámenes por la
- *   API; en el demo sí, para enseñar cómo sería)
- * - createdSlots, deletedChunkIds, bookings: slots abiertos y borrados, y
- *   correcciones reservadas
  */
-export function newDemoState() {
+export interface DemoState {
+  /** Id de evento -> inscrito. */
+  subscriptions: Record<number, boolean>
+  /**
+   * Id de examen -> inscrito. En la intra real un estudiante no puede
+   * inscribirse a exámenes por la API; en el demo sí, para enseñar cómo sería.
+   */
+  examSubscriptions: Record<number, boolean>
+  /** Siguiente id para lo que se crea en la sesión. */
+  nextId: number
+  createdSlots: AgendaItem[]
+  /** Bloques de 15 min de slots de ejemplo que el visitante ha borrado. */
+  deletedChunkIds: number[]
+  /** Correcciones reservadas. */
+  bookings: AgendaItem[]
+}
+
+export function newDemoState(): DemoState {
   return {
     subscriptions: {},
     examSubscriptions: {},
@@ -37,20 +51,31 @@ export function newDemoState() {
 }
 
 /** Apunta o borra al usuario demo de un examen. */
-export function mockSetExamSubscription(state, examId, subscribed) {
+export function mockSetExamSubscription(state: DemoState, examId: number, subscribed: boolean) {
   state.examSubscriptions[examId] = subscribed
   return { subscribed }
 }
 
 /** Apunta o borra al usuario demo de un evento. */
-export function mockSetSubscription(state, eventId, subscribed) {
+export function mockSetSubscription(state: DemoState, eventId: number, subscribed: boolean) {
   state.subscriptions[eventId] = subscribed
   return { subscribed }
 }
 
+interface DemoProject {
+  id: number
+  projectId: number
+  name: string
+  status: Project['status']
+  finalMark: number | null
+  validated: boolean | null
+  teamId: number
+  exam?: boolean
+}
+
 // Proyectos de ejemplo: uno cerrado (se puede agendar corrección), otros en
 // curso o ya finalizados.
-const PROJECTS = [
+const PROJECTS: DemoProject[] = [
   { id: 1, projectId: 1314, name: 'minishell', status: 'waiting_for_correction', finalMark: null, validated: null, teamId: 101 },
   { id: 2, projectId: 1315, name: 'cub3d', status: 'in_progress', finalMark: null, validated: null, teamId: 102 },
   { id: 3, projectId: 1334, name: 'NetPractice', status: 'in_progress', finalMark: null, validated: null, teamId: 103 },
@@ -63,7 +88,7 @@ const PROJECTS = [
   { id: 8, projectId: 2005, name: 'Exam Rank 03', status: 'in_progress', finalMark: null, validated: null, teamId: 108, exam: true },
 ]
 
-export function mockProjects() {
+export function mockProjects(): Project[] {
   const now = new Date().toISOString()
   return PROJECTS.filter((p) => !p.exam).map((p) => ({
     id: p.id,
@@ -86,7 +111,7 @@ export function mockProjects() {
  * Lo del usuario demo que se solapa con [begin, end): sus slots, sus
  * correcciones y aquello a lo que está apuntado. Vacío si no choca nada.
  */
-export function mockOverlaps(state, begin, end) {
+export function mockOverlaps(state: DemoState, begin: Date, end: Date): AgendaItem[] {
   const day = 86_400_000
   const { items } = mockAgenda(state, {
     from: new Date(begin.getTime() - day),
@@ -101,10 +126,10 @@ export function mockOverlaps(state, begin, end) {
 }
 
 /** Abre un slot propio entre dos fechas; lo devuelve ya fusionado. */
-export function mockCreateSlot(state, { begin, end }) {
-  const chunks = Math.max(1, Math.round((end - begin) / 900_000))
+export function mockCreateSlot(state: DemoState, { begin, end }: { begin: Date; end: Date }): AgendaItem[] {
+  const chunks = Math.max(1, Math.round((end.getTime() - begin.getTime()) / 900_000))
   const ids = Array.from({ length: chunks }, () => state.nextId++)
-  const item = {
+  const item: AgendaItem = {
     id: `slot-${ids[0]}`,
     type: 'slot',
     kind: 'slot',
@@ -120,10 +145,10 @@ export function mockCreateSlot(state, { begin, end }) {
 }
 
 /** Borra bloques de slot propios (de ejemplo o creados en la sesión). */
-export function mockDeleteSlots(state, ids) {
+export function mockDeleteSlots(state: DemoState, ids: number[]): void {
   const deleted = new Set([...state.deletedChunkIds, ...ids])
   state.deletedChunkIds = [...deleted]
-  state.createdSlots = state.createdSlots.filter((it) => !it.slotIds.some((id) => deleted.has(id)))
+  state.createdSlots = state.createdSlots.filter((it) => !(it.slotIds ?? []).some((id) => deleted.has(id)))
 }
 
 const FREE_SLOTS = [
@@ -134,12 +159,17 @@ const FREE_SLOTS = [
   { day: 27, start: 11, hours: 1, login: 'dave' },
 ]
 
+interface Range {
+  from: Date
+  to: Date
+}
+
 /** Franjas libres de otros estudiantes para corregir un proyecto. */
-export function mockProjectSlots({ projectId, from, to }) {
-  const items = []
+export function mockProjectSlots({ projectId, from, to }: Range & { projectId: number }): AgendaItem[] {
+  const items: AgendaItem[] = []
   const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
-  const seen = new Set() // corrector + inicio: sin franjas repetidas
-  const push = (begin, hours, login, key) => {
+  const seen = new Set<string>() // corrector + inicio: sin franjas repetidas
+  const push = (begin: Date, hours: number, login: string, key: number) => {
     if (!inRange(begin, from, to)) return
     const id = `${login}@${begin.toISOString()}`
     if (seen.has(id)) return
@@ -174,9 +204,12 @@ export function mockProjectSlots({ projectId, from, to }) {
 }
 
 /** Reserva una corrección de ejemplo (30 min) del proyecto en ese instante. */
-export function mockBookCorrection(state, { projectId, beginAt }) {
+export function mockBookCorrection(
+  state: DemoState,
+  { projectId, beginAt }: { projectId: number; beginAt: Date },
+): AgendaItem {
   const project = PROJECTS.find((p) => p.projectId === projectId)
-  const item = {
+  const item: AgendaItem = {
     id: `correction-${state.nextId++}`,
     type: 'correction',
     kind: 'correction',
@@ -193,7 +226,17 @@ export function mockBookCorrection(state, { projectId, beginAt }) {
   return item
 }
 
-const EVENTS = [
+interface DemoEvent {
+  day: number
+  start: number
+  hours: number
+  name: string
+  kind: string
+  location: string
+  description?: string
+}
+
+const EVENTS: DemoEvent[] = [
   { day: 2, start: 10, hours: 2, name: 'Charla: Introducción a Docker', kind: 'conference', location: 'Auditorio' },
   { day: 5, start: 16, hours: 1.5, name: 'Rush 01 kick-off', kind: 'rush', location: 'Cluster 1' },
   { day: 9, start: 18, hours: 2, name: 'Meetup: Rust para C-devs', kind: 'meetup', location: 'Sala Ágora' },
@@ -223,25 +266,34 @@ const SLOTS = [
   { day: 22, start: 11, hours: 0.75 },
 ]
 
-const CORRECTIONS = [
+const CORRECTIONS: {
+  day: number
+  start: number
+  minutes: number
+  project: string
+  role: 'corrector' | 'corrected'
+  corrector: string
+  correcteds: string[]
+}[] = [
   { day: 8, start: 12, minutes: 30, project: 'minishell', role: 'corrector', corrector: 'demo', correcteds: ['alice', 'bob'] },
   { day: 15, start: 18.5, minutes: 45, project: 'cub3d', role: 'corrected', corrector: 'carol', correcteds: ['demo'] },
   { day: 23, start: 9, minutes: 30, project: 'philosophers', role: 'corrector', corrector: 'demo', correcteds: ['dave'] },
 ]
 
-function at(year, month, day, hour) {
+/** Fecha local; `hour` admite decimales (15.5 = 15:30). */
+function at(year: number, month: number, day: number, hour: number): Date {
   const h = Math.floor(hour)
   const m = Math.round((hour - h) * 60)
   return new Date(year, month, day, h, m, 0)
 }
 
-function inRange(date, from, to) {
+function inRange(date: Date, from: Date, to: Date): boolean {
   return date >= from && date < to
 }
 
-export function mockAgenda(state, { from, to }) {
+export function mockAgenda(state: DemoState, { from, to }: Range): AgendaPayload {
   const deletedChunks = new Set(state.deletedChunkIds)
-  const items = []
+  const items: AgendaItem[] = []
   const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
   const now = new Date()
 
@@ -359,7 +411,8 @@ export function mockAgenda(state, { from, to }) {
         })
       }
       const slot = at(y, m, d, 18)
-      if (inRange(slot, from, to) && ![base + 990, base + 991, base + 992, base + 993].some((id) => deletedChunks.has(id))) {
+      const todaySlotIds = [base + 990, base + 991, base + 992, base + 993]
+      if (inRange(slot, from, to) && !todaySlotIds.some((id) => deletedChunks.has(id))) {
         items.push({
           id: `slot-${base + 99}`,
           type: 'slot',
@@ -369,7 +422,7 @@ export function mockAgenda(state, { from, to }) {
           location: '',
           beginAt: slot.toISOString(),
           endAt: at(y, m, d, 19).toISOString(),
-          slotIds: [base + 990, base + 991, base + 992, base + 993],
+          slotIds: todaySlotIds,
         })
       }
     }
@@ -383,9 +436,9 @@ export function mockAgenda(state, { from, to }) {
   }
 
   items.sort((a, b) => a.beginAt.localeCompare(b.beginAt))
-  const counts = { event: 0, exam: 0, slot: 0, correction: 0, myEvents: 0, myExams: 0 }
+  const counts: AgendaCounts = { event: 0, exam: 0, slot: 0, correction: 0, myEvents: 0, myExams: 0 }
   for (const it of items) {
-    counts[it.type] += 1
+    if (it.type !== 'free') counts[it.type] += 1
     if (it.type === 'event' && it.subscribed) counts.myEvents += 1
     if (it.type === 'exam' && it.subscribed) counts.myExams += 1
   }
