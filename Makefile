@@ -8,7 +8,9 @@
 #
 # Variables opcionales, en .env o en el entorno: PUBLIC_PORT, PUBLIC_URL.
 
-COMPOSE ?= docker compose
+# Los ficheros de Docker están en docker/; las rutas del compose son relativas
+# a la raíz del repositorio (y el proyecto toma su nombre de ella).
+COMPOSE ?= docker compose --project-directory . -f docker/docker-compose.yml
 
 # Lee .env (si existe) para conocer PUBLIC_PORT y PUBLIC_URL, igual que compose.
 -include .env

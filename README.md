@@ -117,7 +117,7 @@ El **modo demo con datos de ejemplo** está siempre disponible en la pantalla de
 
 ## Docker
 
-Para ejecutarlo como un solo servicio, con la API sirviendo también el frontend compilado, hay un `Dockerfile`, un `docker-compose.yml` y un `Makefile` con el ciclo de vida:
+Para ejecutarlo como un solo servicio, con la API sirviendo también el frontend compilado, están `docker/Dockerfile` y `docker/docker-compose.yml`, y en la raíz un `Makefile` con el ciclo de vida:
 
 ```bash
 make build     # construye la imagen
@@ -126,7 +126,7 @@ make logs      # sigue los logs
 make stop      # para y elimina el contenedor
 ```
 
-También `make restart`, `make status`, `make shell`, `make clean` (borra además la imagen y el volumen de sesiones) y `make doctor`, que muestra el puerto y la URL que se van a aplicar y quién ocupa ese puerto en el host: es lo primero que mirar si `make start` falla con "port is already allocated". Sin `make`, los mismos comandos son `docker compose build`, `docker compose up -d --build`, `docker compose logs -f` y `docker compose down`.
+También `make restart`, `make status`, `make shell`, `make clean` (borra además la imagen y el volumen de sesiones) y `make doctor`, que muestra el puerto y la URL que se van a aplicar y quién ocupa ese puerto en el host: es lo primero que mirar si `make start` falla con "port is already allocated". Sin `make`, desde la raíz del repositorio: `docker compose --project-directory . -f docker/docker-compose.yml` seguido de `build`, `up -d --build`, `logs -f` o `down`.
 
 El contenedor lee las credenciales del mismo `.env`. Como todo va por el puerto 3000, el login de la intra vuelve a `http://localhost:3000/api/auth/callback`: registra también esa redirect URI en la app OAuth. Para publicarlo con otra URL, define `PUBLIC_URL` (y `PUBLIC_PORT` para el puerto del host) en `.env`. Las sesiones se guardan en el volumen `calendar42-data` y sobreviven a reinicios.
 
@@ -139,8 +139,8 @@ server/   Express: OAuth, sesiones y la API propia; en producción sirve
 
 shared/   Tipos del contrato de la API, compartidos por servidor y frontend
 
-Dockerfile, docker-compose.yml, Makefile
-          Imagen y ciclo de vida en Docker (make start | stop | logs | build)
+docker/   Dockerfile y docker-compose.yml: imagen y servicio. El ciclo de
+          vida va en el Makefile de la raíz (make start | stop | logs | build)
 
 src/      React: Calendar, ModeBar (los cuatro modos), ProjectPicker, ItemList,
           SlotCreator, DayView (con arrastre para crear slots), ItemPopover,

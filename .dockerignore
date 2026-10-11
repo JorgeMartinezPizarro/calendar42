@@ -14,7 +14,6 @@ server/.sessions.json
 .idea
 assets
 README.md
-Dockerfile
-docker-compose.yml
+docker
 Makefile
 *.log

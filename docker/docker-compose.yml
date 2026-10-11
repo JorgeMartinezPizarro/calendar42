@@ -1,8 +1,15 @@
 # Calendar42 como un solo servicio: la API de Express sirve también el
 # frontend compilado. Ciclo de vida en el Makefile (make start | stop | logs | build).
+#
+# Las rutas son relativas a la raíz del repositorio: se usa desde ahí con
+#   docker compose --project-directory . -f docker/docker-compose.yml ...
+# (es lo que hace el Makefile). Así el nombre del proyecto, y con él el del
+# volumen de sesiones, sigue siendo el de la carpeta del repositorio.
 services:
   calendar42:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     image: calendar42:local
     container_name: calendar42
     # Credenciales de la app OAuth de la intra (FT_CLIENT_ID, FT_CLIENT_SECRET).
