@@ -79,6 +79,7 @@ El prototipo actual demuestra la idea central de Calendar42 mediante:
 - descripción de eventos y exámenes renderizada como Markdown, igual que en la intra;
 - aviso de slot libre u ocupado en la ficha, según el evento o examen se solape con lo que el estudiante ya tiene en su agenda;
 - apuntarse y borrarse de un evento desde la propia ficha, cuando la intra lo permite;
+- exportar la agenda propia (eventos y exámenes inscritos, slots y correcciones de los próximos tres meses) a un fichero `.ics`, el formato estándar iCalendar, para importarla en Google Calendar, Outlook o Apple Calendar; al reimportarlo se actualiza sin duplicar;
 - visualización de la coalición del usuario en la cabecera.
 
 Esta versión debe entenderse como un **primer prototipo funcional**, todavía en una fase temprana de desarrollo.
@@ -300,7 +301,7 @@ La inscripción a eventos ya está disponible. Las tres acciones restantes —in
 
 ### 2. Integración con calendarios personales
 
-Una posible evolución sería permitir que un evento de 42 pueda añadirse directamente al calendario personal del estudiante.
+El primer paso ya está: el botón "Exportar" del calendario descarga la agenda en `.ics` para importarla en el calendario personal. La siguiente evolución sería una suscripción (una URL que el calendario personal consulta sola), para no tener que reimportar cada vez.
 
 Calendar42 mantendría la responsabilidad sobre la información de 42, mientras que el calendario personal seguiría siendo responsable de la vida personal del estudiante.
 

@@ -39,6 +39,36 @@
   border-color: var(--cal-accent);
 }
 
+.calendar__header button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.calendar__export {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Resultado de la exportación: cómo importar el fichero, o por qué no se pudo. */
+.calendar__note {
+  margin: -0.5rem 0 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.calendar__note--ok {
+  color: var(--cal-accent);
+}
+
+.calendar__note--reason {
+  color: #ff9f43;
+}
+
+.calendar__note--error {
+  color: #ff5c5c;
+}
+
 .calendar__weekdays,
 .calendar__grid {
   display: grid;
@@ -150,6 +180,15 @@
   .calendar__header button {
     min-height: 2.4rem;
     padding: 0.35rem 0.6rem;
+  }
+
+  /* En móvil la cabecera no da para el texto: solo el icono. */
+  .calendar__export-label {
+    display: none;
+  }
+
+  .calendar__note {
+    margin: -0.25rem 0 0.5rem;
   }
 
   .calendar__weekdays,

@@ -6,6 +6,12 @@ import './Calendar.css'
 /** De dónde viene la elección de un día: 'today' = botón "Hoy". */
 export type SelectSource = 'today' | undefined
 
+/** Resultado de la última exportación, bajo la cabecera. */
+export interface ExportNote {
+  kind: 'ok' | 'reason' | 'error'
+  text: string
+}
+
 interface CalendarProps {
   /** Primer día del mes mostrado (lo controla el padre). */
   viewDate: Date
@@ -17,10 +23,23 @@ interface CalendarProps {
    * tipo debajo del número.
    */
   dayTypes: Map<string, Set<ItemType>>
+  /** Botón "Exportar": descarga la agenda del usuario en .ics. */
+  onExport?: () => void
+  exporting?: boolean
+  exportNote?: ExportNote | null
 }
 
 /** Vista mensual. */
-function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayTypes }: CalendarProps) {
+function Calendar({
+  viewDate,
+  onViewDateChange,
+  selectedDate,
+  onSelectDate,
+  dayTypes,
+  onExport,
+  exporting = false,
+  exportNote = null,
+}: CalendarProps) {
   const today = new Date()
   const cells = getMonthGrid(viewDate.getFullYear(), viewDate.getMonth())
 
@@ -44,7 +63,29 @@ function Calendar({ viewDate, onViewDateChange, selectedDate, onSelectDate, dayT
         <button type="button" className="calendar__today" onClick={goToToday}>
           Hoy
         </button>
+        {onExport && (
+          <button
+            type="button"
+            className="calendar__export"
+            onClick={onExport}
+            disabled={exporting}
+            title="Descarga tu agenda en .ics para importarla en Google Calendar, Outlook o Apple Calendar"
+            aria-label="Exportar la agenda en formato iCalendar (.ics)"
+          >
+            <span aria-hidden="true">⤓</span>
+            <span className="calendar__export-label">{exporting ? 'Exportando…' : 'Exportar'}</span>
+          </button>
+        )}
       </header>
+
+      {exportNote && (
+        <p
+          className={`calendar__note calendar__note--${exportNote.kind}`}
+          role={exportNote.kind === 'error' ? 'alert' : 'status'}
+        >
+          {exportNote.text}
+        </p>
+      )}
 
       <div className="calendar__weekdays" role="row">
         {WEEKDAY_LABELS.map((label) => (

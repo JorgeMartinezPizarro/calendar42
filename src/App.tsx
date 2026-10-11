@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import Calendar, { type SelectSource } from './components/Calendar.tsx'
+import Calendar, { type ExportNote, type SelectSource } from './components/Calendar.tsx'
 import DayView from './components/DayView.tsx'
 import ItemList from './components/ItemList.tsx'
 import ItemPopover from './components/ItemPopover.tsx'
@@ -15,6 +15,7 @@ import { isAbort, messageOf, statusOf } from './api/http.ts'
 import { fetchProjects } from './api/projects.ts'
 import { bookCorrection, createSlot, deleteSlots, fetchProjectSlots } from './api/slots.ts'
 import { useNow } from './hooks/useNow.ts'
+import { downloadICalendar, toICalendar } from './ical.ts'
 import {
   MIN_SLOT_MINUTES,
   bookingState,
@@ -23,7 +24,7 @@ import {
   subscriptionState,
 } from './subscription.ts'
 import type { ActionState, AgendaWarning, Item, ItemType, Loadable, Project, TimeRange } from './types.ts'
-import { addDays, addMonths, getMonthGridRange, toDateKey } from './utils/date.ts'
+import { addDays, addMonths, getMonthGridRange, startOfDay, toDateKey } from './utils/date.ts'
 import './App.css'
 
 type AuthState = { status: 'checking' } | { status: 'ready'; me: Me; error?: string }
@@ -38,6 +39,10 @@ const LOADING: Loadable<Item> = { status: 'loading', items: EMPTY, error: null }
 const IDLE_ACTION: SlotAction = { busy: false, error: null, created: null }
 // Tiempo que se ve el aviso "Slot creado" antes de irse solo.
 const SLOT_CREATED_NOTICE_MS = 5000
+// Meses hacia delante que se exportan (más los eventos inscritos posteriores).
+const EXPORT_MONTHS = 3
+// Tiempo que se ve el aviso de una exportación correcta.
+const EXPORT_NOTICE_MS = 12000
 
 function monthKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}`
@@ -98,6 +103,7 @@ function App() {
     setProjects(NO_PROJECTS)
     setUpcoming(NO_UPCOMING)
     setFreeSlotsByKey({})
+    setExportNote(null)
     await backToLogin()
   }
 
@@ -556,6 +562,48 @@ function App() {
     }
   }
 
+  // ---- exportar a .ics ----------------------------------------------------
+  // Lo del usuario de hoy a dentro de EXPORT_MONTHS meses, pedido aparte para
+  // no depender de los meses cargados, más los eventos a los que está inscrito
+  // aunque sean posteriores. Se importa en Google Calendar como fichero.
+  const [exporting, setExporting] = useState(false)
+  const [exportNote, setExportNote] = useState<ExportNote | null>(null)
+
+  useEffect(() => {
+    if (exportNote?.kind !== 'ok') return
+    const timer = setTimeout(() => setExportNote(null), EXPORT_NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [exportNote])
+
+  const exportCalendar = async () => {
+    if (!session) return
+    setExporting(true)
+    setExportNote(null)
+    try {
+      const from = startOfDay(new Date())
+      const agenda = await fetchAgenda(from, addMonths(from, EXPORT_MONTHS))
+      const byId = new Map<string, Item>()
+      for (const it of [...agenda.items, ...upcoming.items]) {
+        if (isMine(it) && it.endAt > from) byId.set(it.id, it)
+      }
+      const items = [...byId.values()]
+      if (items.length === 0) {
+        setExportNote({ kind: 'reason', text: 'Nada que exportar: no tienes nada en la agenda desde hoy.' })
+        return
+      }
+      downloadICalendar(`calendar42-${session.user.login}.ics`, toICalendar(items))
+      setExportNote({
+        kind: 'ok',
+        text: `Descargado con ${items.length} elemento${items.length === 1 ? '' : 's'}. En Google Calendar: Configuración → Importar y exportar → Importar. Si lo vuelves a importar, se actualiza sin duplicar.`,
+      })
+    } catch (err) {
+      if (statusOf(err) === 401) return void backToLogin()
+      setExportNote({ kind: 'error', text: `No se pudo exportar: ${messageOf(err)}` })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   // ---- render -------------------------------------------------------------
   if (auth.status === 'checking') {
     return <div className="app__splash">Cargando…</div>
@@ -689,6 +737,9 @@ function App() {
             selectedDate={selectedDate}
             onSelectDate={selectDate}
             dayTypes={dayTypes}
+            onExport={exportCalendar}
+            exporting={exporting}
+            exportNote={exportNote}
           />
           <ModeBar mode={mode} onChange={changeMode} notes={modeNotes} />
 
