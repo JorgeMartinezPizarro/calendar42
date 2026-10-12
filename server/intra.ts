@@ -171,18 +171,38 @@ async function tokenRequest(params: Record<string, string>): Promise<Tokens> {
  * Revoca un token de usuario en la intra (RFC 7009): deja de valer al momento.
  * La intra responde 200 también si el token ya no era válido.
  */
-export async function revokeToken(token: string): Promise<void> {
-  recordCall()
-  const res = await fetch(`${INTRA_BASE}/oauth/revoke`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: process.env.FT_CLIENT_ID ?? '',
-      client_secret: process.env.FT_CLIENT_SECRET ?? '',
-      token,
-    }),
-  })
-  if (!res.ok) throw httpError(`La intra no revocó el token (${res.status})`, { status: res.status })
+export async function revokeToken(token: string, hint: 'access_token' | 'refresh_token'): Promise<void> {
+  const clientId = process.env.FT_CLIENT_ID ?? ''
+  const clientSecret = process.env.FT_CLIENT_SECRET ?? ''
+  const post = (auth: 'basic' | 'body') => {
+    recordCall()
+    const body = new URLSearchParams({ token, token_type_hint: hint })
+    const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
+    if (auth === 'basic') {
+      headers.Authorization = `Basic ${Buffer.from(`${encodeURIComponent(clientId)}:${encodeURIComponent(clientSecret)}`).toString('base64')}`
+    } else {
+      body.set('client_id', clientId)
+      body.set('client_secret', clientSecret)
+    }
+    return fetch(`${INTRA_BASE}/oauth/revoke`, { method: 'POST', headers, body })
+  }
+  // La app se identifica con HTTP Basic, como recomienda el estándar; si la
+  // intra no lo acepta, con las credenciales en el cuerpo (como /oauth/token).
+  let res = await post('basic')
+  if (res.status === 401 || res.status === 403) res = await post('body')
+  if (!res.ok) {
+    throw httpError(`La intra no revocó el ${hint} (${res.status}: ${await oauthErrorOf(res)})`, { status: res.status })
+  }
+}
+
+/** Motivo de un error OAuth ("unauthorized_client: ..."), sin el resto del cuerpo. */
+async function oauthErrorOf(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: unknown; error_description?: unknown }
+    return [body.error, body.error_description].filter((x) => typeof x === 'string').join(': ') || 'sin motivo'
+  } catch {
+    return 'sin motivo'
+  }
 }
 
 export function exchangeCode(code: string): Promise<Tokens> {

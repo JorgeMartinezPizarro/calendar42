@@ -192,11 +192,15 @@ function demoStateOf(session: Session): DemoState {
 onSessionDiscarded(async (session) => {
   if (!session.tokens || !hasAppCredentials()) return
   const { accessToken, refreshToken } = session.tokens
-  try {
-    if (refreshToken) await revokeToken(refreshToken)
-    await revokeToken(accessToken)
-  } catch (err) {
-    console.warn(`[sessions] no se pudieron revocar los tokens de ${session.user.login}:`, asHttpError(err).message)
+  // Cada token por separado: si uno falla, el otro se intenta igual.
+  const pending: [string, 'access_token' | 'refresh_token'][] = [[accessToken, 'access_token']]
+  if (refreshToken) pending.unshift([refreshToken, 'refresh_token'])
+  for (const [token, hint] of pending) {
+    try {
+      await revokeToken(token, hint)
+    } catch (err) {
+      console.warn(`[sessions] no se pudo revocar un token de ${session.user.login}:`, asHttpError(err).message)
+    }
   }
 })
 
