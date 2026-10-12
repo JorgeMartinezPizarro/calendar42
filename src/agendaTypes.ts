@@ -1,20 +1,25 @@
+import { t } from './i18n/index.ts'
 import type { Item, ItemType } from './types.ts'
 
 export interface AgendaTypeInfo {
   type: ItemType
-  label: string
   color: string
 }
 
-/** Tipos de elemento de la agenda, con etiqueta y color. */
+/** Tipos de elemento de la agenda, con su color (la etiqueta, en t.types). */
 export const AGENDA_TYPES: AgendaTypeInfo[] = [
-  { type: 'event', label: 'Eventos', color: '#4f8cff' },
-  { type: 'exam', label: 'Exámenes', color: '#ff5c5c' },
-  { type: 'slot', label: 'Slots abiertos', color: '#20bf6b' },
-  { type: 'correction', label: 'Correcciones', color: '#a55eea' },
+  { type: 'event', color: '#4f8cff' },
+  { type: 'exam', color: '#ff5c5c' },
+  { type: 'slot', color: '#20bf6b' },
+  { type: 'correction', color: '#a55eea' },
   // Franjas libres de otros estudiantes para corregir el proyecto elegido.
-  { type: 'free', label: 'Slots libres', color: '#0fb9b1' },
+  { type: 'free', color: '#0fb9b1' },
 ]
+
+/** Etiqueta en plural de un tipo, en el idioma activo. */
+export function typeLabel(type: ItemType): string {
+  return t.types[type]
+}
 
 export const TYPE_COLORS = Object.fromEntries(AGENDA_TYPES.map((t) => [t.type, t.color])) as Record<
   ItemType,

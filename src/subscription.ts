@@ -2,13 +2,10 @@
 // mismo y, si no, por qué. Las usa la ficha (ItemPopover) y Crear slots.
 
 import { isMine } from './agendaTypes.ts'
+import { t } from './i18n/index.ts'
+import { itemName } from './itemText.ts'
 import type { Item, Project, TimeRange } from './types.ts'
 import { formatTime } from './utils/date.ts'
-
-const EXAM_REASON =
-  'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.'
-const SCOPE_REASON =
-  'La sesión no tiene el scope "profile", necesario para apuntarse. Actívalo en la app OAuth de la intra, cierra sesión y vuelve a entrar.'
 
 /** Duración mínima de un slot propio: dos bloques de 15 min. */
 export const MIN_SLOT_MINUTES = 30
@@ -44,8 +41,12 @@ export interface BookingState extends ButtonState {
 /** "Se solapa con X (10:00–11:00)" con lo primero que choca, y cuántos más. */
 function overlapReason(conflicts: Item[]): string {
   const [first, ...rest] = conflicts
-  const what = `${first.name} (${formatTime(first.beginAt)}–${formatTime(first.endAt)})`
-  return `Se solapa con ${what}${rest.length ? ` y ${rest.length} más` : ''}`
+  return t.rules.overlaps(describe(first), rest.length)
+}
+
+/** "Nombre (10:00–11:00)". */
+function describe(item: Item): string {
+  return `${itemName(item)} (${formatTime(item.beginAt)}–${formatTime(item.endAt)})`
 }
 
 export interface SubscriptionOptions {
@@ -78,30 +79,24 @@ export function subscriptionState(
   const action = item.subscribed ? 'unsubscribe' : 'subscribe'
   const blocked = (reason: string): SubscriptionState => ({ action, enabled: false, reason })
 
-  const noun = item.type === 'exam' ? 'El examen' : 'El evento'
+  const exam = item.type === 'exam'
 
-  if (item.type === 'exam' && !demo) return blocked(EXAM_REASON)
-  if (item.externalKind) {
-    return blocked(
-      item.signupUrl
-        ? 'Evento externo: la inscripción se hace en su web, no en la intra'
-        : 'Evento externo: la intra no gestiona su inscripción; busca el enlace en la descripción',
-    )
-  }
-  if (!scopeOk && item.type === 'event') return blocked(SCOPE_REASON)
-  if (item.endAt <= now) return blocked(`${noun} ya ha terminado`)
-  if (item.beginAt <= now) return blocked(`${noun} ya ha empezado`)
+  if (exam && !demo) return blocked(t.rules.examDisabled)
+  if (item.externalKind) return blocked(item.signupUrl ? t.rules.externalWithLink : t.rules.externalNoLink)
+  if (!scopeOk && item.type === 'event') return blocked(t.rules.missingProfileScope)
+  if (item.endAt <= now) return blocked(t.rules.ended(exam))
+  if (item.beginAt <= now) return blocked(t.rules.started(exam))
 
   if (item.subscribed) {
     const limit = item.cancellationLimitHours || 0
     if (limit > 0 && item.beginAt.getTime() - now.getTime() < limit * 3_600_000) {
-      return blocked(`La intra no permite borrarse a menos de ${limit} h del inicio`)
+      return blocked(t.rules.cancellationLimit(limit))
     }
   } else if (conflicts.length) {
     // El detalle de con qué choca ya va en la ficha, bajo los botones.
-    return blocked('No puedes apuntarte: se solapa con tu agenda')
+    return blocked(t.rules.overlapsAgenda)
   } else if (item.maxPeople && item.maxPeople > 0 && (item.subscribers ?? 0) >= item.maxPeople) {
-    return blocked('Aforo completo')
+    return blocked(t.rules.full)
   }
 
   return { action, enabled: true, reason: null }
@@ -122,11 +117,11 @@ export function bookingState(
 ): BookingState | null {
   if (item.type !== 'free') return null
   const blocked = (reason: string, overlap = false): BookingState => ({ enabled: false, reason, overlap })
-  if (item.endAt <= now) return blocked('La franja ya ha pasado')
-  if (!project) return blocked('Elige un proyecto cerrado en "Correcciones" para agendar su corrección')
-  if (!project.closed) return blocked(`${project.name} aún no está cerrado: no se puede agendar su corrección`)
-  if (!project.teamId) return blocked('La intra no indica el equipo del proyecto')
-  if (startAt <= now) return blocked('Esa hora ya ha pasado')
+  if (item.endAt <= now) return blocked(t.rules.slotPassed)
+  if (!project) return blocked(t.rules.pickProject)
+  if (!project.closed) return blocked(t.rules.projectNotClosed(project.name))
+  if (!project.teamId) return blocked(t.rules.noTeam)
+  if (startAt <= now) return blocked(t.rules.timePassed)
   const range = {
     id: item.id,
     beginAt: startAt,
@@ -140,7 +135,7 @@ export function bookingState(
 /** Borrar un slot propio (type 'slot'): solo si aún no ha empezado. */
 export function slotDeleteState(item: Item, now: Date = new Date()): ButtonState | null {
   if (item.type !== 'slot') return null
-  if (item.beginAt <= now) return { enabled: false, reason: 'El slot ya ha empezado' }
+  if (item.beginAt <= now) return { enabled: false, reason: t.rules.slotStarted }
   return { enabled: true, reason: null }
 }
 
@@ -152,18 +147,14 @@ export function slotDeleteState(item: Item, now: Date = new Date()): ButtonState
  */
 export function slotCreateState(range: TimeRange, now: Date = new Date(), items: Item[] = []): ButtonState {
   const blocked = (reason: string): ButtonState => ({ enabled: false, reason })
-  if (range.beginAt <= now) return blocked('El slot debe empezar en el futuro')
+  if (range.beginAt <= now) return blocked(t.rules.slotInPast)
   if (range.endAt.getTime() - range.beginAt.getTime() < MIN_SLOT_MINUTES * 60_000) {
-    return blocked(`El slot debe durar al menos ${MIN_SLOT_MINUTES} minutos`)
+    return blocked(t.rules.slotTooShort(MIN_SLOT_MINUTES))
   }
   const conflicts = overlappingItems({ id: 'nuevo-slot', ...range }, items)
   if (conflicts.length) return blocked(overlapReason(conflicts))
   const [near] = slotsTooClose(range, items)
-  if (near) {
-    return blocked(
-      `Deja ${SLOT_GAP_MINUTES} minutos libres entre slots: queda pegado a ${near.name} (${formatTime(near.beginAt)}–${formatTime(near.endAt)})`,
-    )
-  }
+  if (near) return blocked(t.rules.slotGap(SLOT_GAP_MINUTES, describe(near)))
   return { enabled: true, reason: null }
 }
 

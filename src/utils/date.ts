@@ -1,4 +1,6 @@
-export const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+import { t } from '../i18n/index.ts'
+
+// Fechas y horas con el locale del idioma activo (t.locale).
 
 export function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
@@ -29,12 +31,12 @@ export function capitalize(text: string): string {
 }
 
 export function formatMonthYear(date: Date): string {
-  return capitalize(date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }))
+  return capitalize(date.toLocaleDateString(t.locale, { month: 'long', year: 'numeric' }))
 }
 
 export function formatLongDate(date: Date): string {
   return capitalize(
-    date.toLocaleDateString('es-ES', {
+    date.toLocaleDateString(t.locale, {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
@@ -44,12 +46,12 @@ export function formatLongDate(date: Date): string {
 }
 
 export function formatTime(date: Date): string {
-  return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 /** "mié, 15 oct" */
 export function formatShortDay(date: Date): string {
-  return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+  return date.toLocaleDateString(t.locale, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 /** Franja horaria: "mié, 15 oct · 18:00–20:00"; si cruza días, con ambas fechas. */

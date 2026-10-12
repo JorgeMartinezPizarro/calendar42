@@ -1,5 +1,6 @@
 import type { SessionUser } from '../types.ts'
-import { readJson } from './http.ts'
+import { t } from '../i18n/index.ts'
+import { readJson, withLanguage } from './http.ts'
 
 /** Sesión iniciada (real o demo). */
 export interface LoggedIn {
@@ -20,7 +21,7 @@ export type Me = LoggedIn | LoggedOut
 
 /** Usuario de la sesión actual, o qué formas de entrar hay si no hay sesión. */
 export async function fetchMe(): Promise<Me> {
-  const res = await fetch('/api/auth/me')
+  const res = await fetch('/api/auth/me', withLanguage())
   const body = await readJson(res)
   if (res.status === 401) {
     return {
@@ -29,7 +30,7 @@ export async function fetchMe(): Promise<Me> {
       demoAvailable: Boolean(body.demoAvailable),
     }
   }
-  if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `Error ${res.status}`)
+  if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `${t.api.generic} ${res.status}`)
   return {
     user: body.user as SessionUser,
     demo: Boolean(body.demo),
@@ -43,9 +44,9 @@ export function loginWith42(): void {
 }
 
 export async function loginDemo(): Promise<LoggedIn> {
-  const res = await fetch('/api/auth/demo', { method: 'POST' })
+  const res = await fetch('/api/auth/demo', withLanguage({ method: 'POST' }))
   const body = await readJson(res)
-  if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `Error ${res.status}`)
+  if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `${t.api.generic} ${res.status}`)
   return { user: body.user as SessionUser, demo: true, scope: null }
 }
 

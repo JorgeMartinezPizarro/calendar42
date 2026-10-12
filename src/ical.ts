@@ -1,19 +1,13 @@
 // Exportación de la agenda en iCalendar (RFC 5545, ficheros .ics): el formato
 // que importan Google Calendar, Outlook y Apple Calendar.
 
-import type { Item, ItemType } from './types.ts'
+import { t } from './i18n/index.ts'
+import { itemDescription, itemName } from './itemText.ts'
+import type { Item } from './types.ts'
 
 const CRLF = '\r\n'
 // Longitud máxima de una línea en octetos, sin contar el salto (RFC 5545 §3.1).
 const MAX_LINE_OCTETS = 75
-
-const CATEGORIES: Record<ItemType, string> = {
-  event: 'Evento',
-  exam: 'Examen',
-  slot: 'Slot de corrección',
-  correction: 'Corrección',
-  free: 'Slot libre',
-}
 
 /** Texto escapado para un valor TEXT: barra invertida, ';', ',' y saltos. */
 function escapeText(text: string): string {
@@ -57,8 +51,8 @@ function foldLine(line: string): string {
 
 /** Descripción en texto plano: la de la intra es Markdown, a veces con HTML. */
 function plainDescription(item: Item): string {
-  const text = (item.description ?? '').replace(/<[^>]+>/g, '').trim()
-  const extra = item.signupUrl ? `Inscripción: ${item.signupUrl}` : ''
+  const text = itemDescription(item).replace(/<[^>]+>/g, '').trim()
+  const extra = item.signupUrl ? `${t.export.signup}: ${item.signupUrl}` : ''
   return [text, extra].filter(Boolean).join('\n\n')
 }
 
@@ -71,11 +65,11 @@ function eventLines(item: Item, stamp: string): string[] {
     `DTSTAMP:${stamp}`,
     `DTSTART:${utcStamp(item.beginAt)}`,
     `DTEND:${utcStamp(item.endAt)}`,
-    `SUMMARY:${escapeText(item.name)}`,
+    `SUMMARY:${escapeText(itemName(item))}`,
     ...(item.location ? [`LOCATION:${escapeText(item.location)}`] : []),
     ...(description ? [`DESCRIPTION:${escapeText(description)}`] : []),
     ...(item.signupUrl ? [`URL:${item.signupUrl}`] : []),
-    `CATEGORIES:${escapeText(CATEGORIES[item.type])}`,
+    `CATEGORIES:${escapeText(t.itemType[item.type])}`,
     'STATUS:CONFIRMED',
     'TRANSP:OPAQUE',
     'END:VEVENT',

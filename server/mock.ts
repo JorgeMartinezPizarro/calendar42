@@ -231,6 +231,14 @@ export function mockBookCorrection(
     kind: 'correction',
     name: `Corrección: ${project?.name ?? 'proyecto'}`,
     description: ['Te corrigen', 'Corrector: alice', 'Reservada desde Calendar42 (demo)'].join('\n'),
+    correctionInfo: {
+      project: project?.name ?? 'project',
+      corrector: 'alice',
+      correcteds: ['demo'],
+      team: null,
+      mark: null,
+      bookedHere: true,
+    },
     location: '',
     beginAt: beginAt.toISOString(),
     endAt: new Date(beginAt.getTime() + 30 * 60_000).toISOString(),
@@ -355,6 +363,7 @@ export function mockAgenda(state: DemoState, { from, to }: Range): AgendaPayload
         kind: 'exam',
         name: t.name,
         description: `Proyectos: ${t.projects.join(', ')}\nCursus: 42cursus`,
+        examInfo: { projects: t.projects, cursus: ['42cursus'], ipRange: null },
         location: t.location,
         beginAt: begin.toISOString(),
         endAt: new Date(begin.getTime() + t.hours * 3_600_000).toISOString(),
@@ -401,6 +410,7 @@ export function mockAgenda(state: DemoState, { from, to }: Range): AgendaPayload
         role: t.role,
         done: begin < now,
         projectId: null,
+        correctionInfo: { project: t.project, corrector: t.corrector, correcteds: t.correcteds, team: null, mark: null },
       })
     })
 

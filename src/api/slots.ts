@@ -1,19 +1,20 @@
 import type { AgendaItem } from '../../shared/types.ts'
 import type { Item, TimeRange } from '../types.ts'
+import { t } from '../i18n/index.ts'
 import { jsonBody, request, toItem } from './http.ts'
 
 /** Abre un slot de corrección propio. Devuelve los bloques creados, fusionados. */
 export async function createSlot({ beginAt, endAt }: TimeRange): Promise<Item[]> {
   const body = await request<{ items?: AgendaItem[] }>('/api/slots', {
     ...jsonBody('POST', { beginAt: beginAt.toISOString(), endAt: endAt.toISOString() }),
-    fallback: 'No se pudo crear el slot',
+    fallback: t.api.createSlot,
   })
   return (body.items ?? []).map(toItem)
 }
 
 /** Borra los bloques (ids de la intra) de un slot propio. */
 export async function deleteSlots(ids: number[]): Promise<void> {
-  await request('/api/slots', { ...jsonBody('DELETE', { ids }), fallback: 'No se pudo borrar el slot' })
+  await request('/api/slots', { ...jsonBody('DELETE', { ids }), fallback: t.api.deleteSlot })
 }
 
 /**
@@ -29,7 +30,7 @@ export async function fetchProjectSlots(
   const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() })
   const body = await request<{ items?: AgendaItem[] }>(`/api/projects/${projectId}/slots?${params}`, {
     signal,
-    fallback: 'No se pudieron cargar los slots libres',
+    fallback: t.api.freeSlots,
   })
   return (body.items ?? []).map(toItem)
 }
@@ -45,7 +46,7 @@ export interface Booking {
 export async function bookCorrection({ projectId, teamId, beginAt, correctorId = null }: Booking): Promise<Item | null> {
   const body = await request<{ item?: AgendaItem | null }>('/api/corrections', {
     ...jsonBody('POST', { projectId, teamId, beginAt: beginAt.toISOString(), correctorId }),
-    fallback: 'No se pudo reservar la corrección',
+    fallback: t.api.book,
   })
   return body.item ? toItem(body.item) : null
 }

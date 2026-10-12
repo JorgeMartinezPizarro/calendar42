@@ -2,6 +2,7 @@
 
 import type { AgendaItem } from '../../shared/types.ts'
 import { withEventExtras } from '../externalEvents.ts'
+import { lang } from '../i18n/index.ts'
 import type { Item } from '../types.ts'
 
 /** Error de la API propia, con el estado HTTP (401 = sesión caducada). */
@@ -49,13 +50,20 @@ export async function request<T>(
   url: string,
   { fallback, ...init }: RequestInit & { fallback: string },
 ): Promise<T> {
-  const res = await fetch(url, init)
+  const res = await fetch(url, withLanguage(init))
   const body = await readJson(res)
   if (!res.ok) {
     const message = typeof body.error === 'string' ? body.error : `${fallback} (${res.status})`
     throw new ApiRequestError(message, res.status)
   }
   return body as T
+}
+
+/** Añade el idioma activo (Accept-Language): la API responde sus mensajes en él. */
+export function withLanguage(init: RequestInit = {}): RequestInit {
+  const headers = new Headers(init.headers)
+  headers.set('Accept-Language', lang)
+  return { ...init, headers }
 }
 
 /** Opciones de envío de un cuerpo JSON. */

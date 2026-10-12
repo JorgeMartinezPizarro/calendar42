@@ -3,12 +3,13 @@ import Calendar, { type ExportNote, type SelectSource } from './components/Calen
 import DayView from './components/DayView.tsx'
 import ItemList from './components/ItemList.tsx'
 import ItemPopover from './components/ItemPopover.tsx'
+import LanguageToggle from './components/LanguageToggle.tsx'
 import LoginView from './components/LoginView.tsx'
 import ModeBar, { type Mode, type ModeNote, type ModeNotes } from './components/ModeBar.tsx'
 import ProjectPicker from './components/ProjectPicker.tsx'
 import SlotCreator, { type SlotAction, type SlotEdge } from './components/SlotCreator.tsx'
 import { clearSnapshots, loadSnapshot, saveSnapshot, type MonthAgenda } from './agendaCache.ts'
-import { AGENDA_TYPES, isMine } from './agendaTypes.ts'
+import { isMine } from './agendaTypes.ts'
 import { fetchMe, logout, type LoggedIn, type Me } from './api/auth.ts'
 import { fetchAgenda, type Agenda } from './api/agenda.ts'
 import { fetchUpcomingEvents, setEventSubscription, setExamSubscription } from './api/events.ts'
@@ -16,6 +17,8 @@ import { isAbort, messageOf, statusOf } from './api/http.ts'
 import { fetchProjects } from './api/projects.ts'
 import { bookCorrection, createSlot, deleteSlots, fetchProjectSlots } from './api/slots.ts'
 import { useNow } from './hooks/useNow.ts'
+import { t } from './i18n/index.ts'
+import { useI18n, type CampusCountry } from './i18n/context.ts'
 import { downloadICalendar, toICalendar } from './ical.ts'
 import {
   MIN_SLOT_MINUTES,
@@ -66,14 +69,18 @@ function takeAuthErrorFromUrl(): string | null {
   return value
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  ...Object.fromEntries(AGENDA_TYPES.map((t) => [t.type, t.label])),
-  myEvents: 'Mis eventos',
-  myExams: 'Mis exámenes',
+function describeWarning(w: AgendaWarning): string {
+  const message = w.code === 'missing_scope' ? t.warnings.missingScope : w.message
+  return `${t.warnings.sources[w.type] ?? w.type}: ${message}`
 }
 
-function describeWarning(w: AgendaWarning): string {
-  return `${SOURCE_LABELS[w.type] ?? w.type}: ${w.message}`
+/**
+ * País del campus para elegir idioma: undefined sin sesión o en sesiones
+ * anteriores a este dato; null si el usuario no tiene campus.
+ */
+function countryOf(me: Me): CampusCountry {
+  if (!me.user || me.user.campus === undefined) return undefined
+  return me.user.campus?.country ?? null
 }
 
 /** Clave de la copia local de un usuario: el demo aparte de las cuentas reales. */
@@ -85,6 +92,8 @@ function App() {
   // ---- sesión -------------------------------------------------------------
   const [auth, setAuth] = useState<AuthState>({ status: 'checking' })
   const [authError] = useState(takeAuthErrorFromUrl)
+  // El idioma depende del campus: en España, español (con bandera); fuera, inglés.
+  const { setCampusCountry } = useI18n()
 
   /**
    * Entra con la sesión que devuelve el servidor. Con una sesión que ya
@@ -98,8 +107,9 @@ function App() {
     setAgendaByMonth(snapshot?.months ?? {})
     setUpcoming(snapshot ? { status: 'idle', items: snapshot.upcoming, error: null } : NO_UPCOMING)
     setProjects(snapshot ? { status: 'idle', items: snapshot.projects, error: null } : NO_PROJECTS)
+    setCampusCountry(countryOf(me))
     setAuth({ status: 'ready', me })
-  }, [])
+  }, [setCampusCountry])
 
   useEffect(() => {
     fetchMe()
@@ -617,17 +627,14 @@ function App() {
       }
       const items = [...byId.values()]
       if (items.length === 0) {
-        setExportNote({ kind: 'reason', text: 'Nada que exportar: no tienes nada en la agenda desde hoy.' })
+        setExportNote({ kind: 'reason', text: t.export.nothing })
         return
       }
       downloadICalendar(`calendar42-${session.user.login}.ics`, toICalendar(items))
-      setExportNote({
-        kind: 'ok',
-        text: `Descargado con ${items.length} elemento${items.length === 1 ? '' : 's'}. En Google Calendar: Configuración → Importar y exportar → Importar. Si lo vuelves a importar, se actualiza sin duplicar.`,
-      })
+      setExportNote({ kind: 'ok', text: t.export.done(items.length) })
     } catch (err) {
       if (statusOf(err) === 401) return void backToLogin()
-      setExportNote({ kind: 'error', text: `No se pudo exportar: ${messageOf(err)}` })
+      setExportNote({ kind: 'error', text: t.export.failed(messageOf(err)) })
     } finally {
       setExporting(false)
     }
@@ -635,7 +642,7 @@ function App() {
 
   // ---- render -------------------------------------------------------------
   if (auth.status === 'checking') {
-    return <div className="app__splash">Cargando…</div>
+    return <div className="app__splash">{t.app.splash}</div>
   }
 
   if (!session) {
@@ -710,33 +717,33 @@ function App() {
     <div className={appClass} style={coalitionStyle}>
       <header className="app__header">
         <h1>Calendar42</h1>
-        <p className="app__subtitle">Calendario para estudiantes de 42 Madrid</p>
+        <p className="app__subtitle">{t.app.tagline(user.campus?.name || null)}</p>
         {session.demo && (
-          <span className="app__notice" title="Configura FT_CLIENT_ID y FT_CLIENT_SECRET en .env">
-            Modo demo
+          <span className="app__notice" title={t.app.demoBadgeTitle}>
+            {t.app.demoBadge}
           </span>
         )}
         {status === 'error' && (
           <span className="app__error">
-            No se pudo cargar la agenda: {error}
+            {t.app.agendaError(error ?? '')}
             <button type="button" className="app__retry" onClick={retryMonth}>
-              Reintentar
+              {t.common.retry}
             </button>
           </span>
         )}
         {status !== 'error' && warnings.length > 0 && (
           <span className="app__warning" title={warnings.map(describeWarning).join('\n')}>
             {warnings.some((w) => w.code === 'transient_error')
-              ? `La intra no respondió para ${warnings.length} fuente${warnings.length === 1 ? '' : 's'}`
-              : `${warnings.length} fuente${warnings.length === 1 ? '' : 's'} con aviso`}
+              ? t.app.intraNoResponse(warnings.length)
+              : t.app.sourcesWithWarning(warnings.length)}
             <button type="button" className="app__retry" onClick={retryMonth}>
-              Reintentar
+              {t.common.retry}
             </button>
           </span>
         )}
         <div className="app__user">
           {coalition && (
-            <span className="coalition" title={`Coalición: ${coalition.name}`}>
+            <span className="coalition" title={t.app.coalitionTitle(coalition.name)}>
               <span className="coalition__emblem" aria-hidden="true">
                 {coalition.image ? (
                   <img className="coalition__logo" src={coalition.image} alt="" />
@@ -745,15 +752,16 @@ function App() {
                 )}
               </span>
               <span className="coalition__text">
-                <span className="coalition__label">Coalición</span>
+                <span className="coalition__label">{t.app.coalition}</span>
                 <span className="coalition__name">{coalition.name}</span>
               </span>
             </span>
           )}
           {user.image && <img className="app__avatar" src={user.image} alt="" width="28" height="28" />}
           <span className="app__login">{user.login}</span>
+          <LanguageToggle />
           <button type="button" className="app__logout" onClick={handleLogout}>
-            Salir
+            {t.app.logout}
           </button>
         </div>
       </header>
@@ -784,20 +792,20 @@ function App() {
           )}
           {mode === 'exams' && (
             <ItemList
-              title="Próximos exámenes"
+              title={t.app.upcomingExams}
               items={availableExams}
               status={status}
-              emptyText="Ningún examen disponible en el próximo mes"
+              emptyText={t.app.noExams}
               openItemId={openItem?.id ?? null}
               onOpenItem={openItemCard}
             />
           )}
           {mode === 'events' && (
             <ItemList
-              title="Próximos eventos"
+              title={t.app.upcomingEvents}
               items={upcomingEvents}
               status={upcoming.status}
-              emptyText={upcoming.error ?? 'Ningún evento futuro en la intra'}
+              emptyText={upcoming.error ?? t.app.noEvents}
               openItemId={openItem?.id ?? null}
               onOpenItem={openItemCard}
             />

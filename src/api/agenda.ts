@@ -1,5 +1,6 @@
 import type { AgendaPayload } from '../../shared/types.ts'
 import type { AgendaCounts, AgendaWarning, Item } from '../types.ts'
+import { t } from '../i18n/index.ts'
 import { request, toItem } from './http.ts'
 
 export interface Agenda {
@@ -18,7 +19,7 @@ export async function fetchAgenda(
   const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() })
   const data = await request<AgendaPayload & { source: Agenda['source'] }>(`/api/agenda?${params}`, {
     signal,
-    fallback: 'Error al cargar la agenda',
+    fallback: t.api.agenda,
   })
   return {
     source: data.source,

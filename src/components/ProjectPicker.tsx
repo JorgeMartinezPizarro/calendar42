@@ -1,32 +1,26 @@
 import { useMemo, type ReactNode } from 'react'
+import { t } from '../i18n/index.ts'
 import type { Item, Loadable, Project } from '../types.ts'
 import './ProjectPicker.css'
 
-const STATUS_LABELS: Record<string, string> = {
-  waiting_for_correction: 'Cerrado, pendiente de corrección',
-  in_progress: 'En curso',
-  searching_a_group: 'Buscando grupo',
-  creating_group: 'Creando grupo',
-}
-
 // Grupos del desplegable, en este orden. Solo el primero es seleccionable.
-const GROUPS: { key: string; label: string; match: (p: Project) => boolean }[] = [
-  { key: 'closed', label: 'Cerrados, listos para corrección', match: (p) => p.closed },
-  { key: 'open', label: 'En curso, aún sin cerrar', match: (p) => !p.closed },
+const GROUPS: { key: 'closed' | 'open'; match: (p: Project) => boolean }[] = [
+  { key: 'closed', match: (p) => p.closed },
+  { key: 'open', match: (p) => !p.closed },
 ]
 
 function describe(p: Project): string {
-  const status = STATUS_LABELS[p.status] ?? p.status
+  const status = t.projects.status[p.status] ?? p.status
   if (p.closed) return `${status}.`
-  return `${status}. Hasta que cierres el proyecto no se puede agendar su corrección.`
+  return `${status}. ${t.projects.notClosedYet}`
 }
 
 function describeFreeSlots(freeSlots: Loadable<Item>): string {
-  if (freeSlots.status === 'loading') return 'Buscando slots libres…'
+  if (freeSlots.status === 'loading') return t.projects.searchingSlots
   if (freeSlots.error) return freeSlots.error
   const n = freeSlots.items.length
-  if (n === 0) return 'Ningún slot libre este mes para corregir este proyecto.'
-  return `${n} franja${n === 1 ? '' : 's'} libre${n === 1 ? '' : 's'} este mes, en el calendario y en las horas del día. Pulsa una para agendar la corrección.`
+  if (n === 0) return t.projects.noFreeSlots
+  return t.projects.freeSlots(n)
 }
 
 interface ProjectPickerProps {
@@ -68,14 +62,14 @@ function ProjectPicker({
   if (error) {
     body = <p className="projects__empty projects__empty--error">{error}</p>
   } else if (status === 'loading' && projects.length === 0) {
-    body = <p className="projects__empty">Cargando…</p>
+    body = <p className="projects__empty">{t.common.loading}</p>
   } else if (listed.length === 0) {
-    body = <p className="projects__empty">Ningún proyecto en curso en tu cursus</p>
+    body = <p className="projects__empty">{t.projects.none}</p>
   } else {
     body = (
       <>
         <label className="projects__label" htmlFor="project-picker">
-          Proyecto cerrado para agendar su corrección
+          {t.projects.pickLabel}
         </label>
         <select
           id="project-picker"
@@ -83,9 +77,9 @@ function ProjectPicker({
           value={selectedId ?? ''}
           onChange={(e) => onSelect(e.target.value ? Number(e.target.value) : null)}
         >
-          <option value="">{closedCount ? 'Elige un proyecto…' : 'Ningún proyecto cerrado todavía'}</option>
+          <option value="">{closedCount ? t.projects.pick : t.projects.noneClosed}</option>
           {groups.map((g) => (
-            <optgroup key={g.key} label={g.label}>
+            <optgroup key={g.key} label={g.key === 'closed' ? t.projects.groupClosed : t.projects.groupOpen}>
               {g.items.map((p) => (
                 <option key={p.id} value={p.id} disabled={!p.closed}>
                   {p.name}
@@ -98,8 +92,8 @@ function ProjectPicker({
           {selected
             ? describe(selected)
             : closedCount
-              ? `${closedCount} proyecto${closedCount === 1 ? '' : 's'} cerrado${closedCount === 1 ? '' : 's'} a la espera de corrección.`
-              : 'Cierra un proyecto en la intra y aparecerá aquí listo para agendar su corrección.'}
+              ? t.projects.closedCount(closedCount)
+              : t.projects.closeOneHint}
         </p>
         {selected?.closed && freeSlots && (
           <p
@@ -114,9 +108,9 @@ function ProjectPicker({
   }
 
   return (
-    <section className="projects" aria-label="Proyectos del alumno">
+    <section className="projects" aria-label={t.projects.label}>
       <h2 className="projects__title">
-        Correcciones
+        {t.projects.title}
         <span className="projects__count">{listed.length}</span>
       </h2>
       {body}

@@ -1,5 +1,6 @@
 import type { AgendaItem, SubscriptionResult } from '../../shared/types.ts'
 import type { Item } from '../types.ts'
+import { t } from '../i18n/index.ts'
 import { request, toItem } from './http.ts'
 
 /**
@@ -9,7 +10,7 @@ import { request, toItem } from './http.ts'
 export async function fetchUpcomingEvents({ signal }: { signal?: AbortSignal } = {}): Promise<Item[]> {
   const body = await request<{ items?: AgendaItem[] }>('/api/events/upcoming', {
     signal,
-    fallback: 'Error al cargar los eventos',
+    fallback: t.api.events,
   })
   return (body.items ?? []).map(toItem)
 }
@@ -23,7 +24,7 @@ export interface Subscription {
 async function setSubscription(url: string, subscribed: boolean): Promise<Subscription> {
   const body = await request<SubscriptionResult>(url, {
     method: subscribed ? 'POST' : 'DELETE',
-    fallback: 'Error',
+    fallback: t.api.generic,
   })
   return { subscribed: Boolean(body.subscribed), subscribers: body.subscribers ?? null }
 }

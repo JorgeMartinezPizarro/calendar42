@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from 'react'
 import { itemColor } from '../agendaTypes.ts'
+import { t } from '../i18n/index.ts'
+import { itemName } from '../itemText.ts'
 import { useNow } from '../hooks/useNow.ts'
 import { MIN_SLOT_MINUTES } from '../subscription.ts'
 import type { Item, Loadable, TimeRange } from '../types.ts'
@@ -111,9 +113,9 @@ function itemMeta(item: Item): string {
     case 'slot':
       return time
     case 'free':
-      return `${time} · pulsa para agendar`
+      return `${time} · ${t.day.metaFree}`
     case 'correction':
-      return `${time} · ${item.role === 'corrector' ? 'corriges' : 'te corrigen'}${item.done ? ' · hecha' : ''}`
+      return `${time} · ${item.role === 'corrector' ? t.day.metaCorrector : t.day.metaCorrected}${item.done ? ` · ${t.day.metaDone}` : ''}`
     default:
       return item.location ? `${time} · ${item.location}` : time
   }
@@ -217,7 +219,7 @@ function DayView({
 
   if (showingPanel) {
     return (
-      <section className="dayview dayview--panel" aria-label="Detalle del elemento">
+      <section className="dayview dayview--panel" aria-label={t.day.panelLabel}>
         <div className="dayview__panel">{panel}</div>
       </section>
     )
@@ -345,20 +347,20 @@ function DayView({
   const handleProps = (edge: SlotEdge): HTMLAttributes<HTMLSpanElement> => ({
     className: `dayview__handle dayview__handle--${edge}`,
     role: 'slider',
-    'aria-label': edge === 'start' ? 'Inicio del slot' : 'Fin del slot',
+    'aria-label': edge === 'start' ? t.day.slotStart : t.day.slotEnd,
     onPointerDown: startResize(edge),
     onPointerMove: moveResize,
     onPointerUp: endResize,
     onPointerCancel: () => setResize(null),
   })
 
-  const monthLabel = capitalize(date.toLocaleDateString('es-ES', { month: 'long' }))
+  const monthLabel = capitalize(date.toLocaleDateString(t.locale, { month: 'long' }))
 
   return (
-    <section className="dayview" aria-label="Vista del día por horas">
+    <section className="dayview" aria-label={t.day.label}>
       <header className="dayview__header">
         {onBack && (
-          <button type="button" className="dayview__back" onClick={onBack} aria-label="Volver al mes">
+          <button type="button" className="dayview__back" onClick={onBack} aria-label={t.day.backToMonth}>
             ‹ {monthLabel}
           </button>
         )}
@@ -366,30 +368,30 @@ function DayView({
           <span className="dayview__title-long">{formatLongDate(date)}</span>
           <span className="dayview__title-short">{capitalize(formatShortDay(date))}</span>
         </h2>
-        {isToday && <span className="dayview__badge">Hoy</span>}
+        {isToday && <span className="dayview__badge">{t.day.today}</span>}
         <span className="dayview__count">
           {status === 'loading'
-            ? 'Cargando…'
+            ? t.common.loading
             : laidOut.length === 0
-              ? 'Nada previsto'
-              : `${laidOut.length} elemento${laidOut.length === 1 ? '' : 's'}`}
+              ? t.day.nothing
+              : t.day.count(laidOut.length)}
         </span>
         {onShiftDay && (
           <span className="dayview__nav">
-            <button type="button" onClick={() => onShiftDay(-1)} aria-label="Día anterior">
+            <button type="button" onClick={() => onShiftDay(-1)} aria-label={t.day.prevDay}>
               ‹
             </button>
-            <button type="button" onClick={() => onShiftDay(1)} aria-label="Día siguiente">
+            <button type="button" onClick={() => onShiftDay(1)} aria-label={t.day.nextDay}>
               ›
             </button>
           </span>
         )}
         {selectable && (
           <span className="dayview__hint">
-            <span>Arrastra con el ratón o toca una hora para crear un slot; ajústalo con los tiradores</span>
+            <span>{t.day.selectHint}</span>
             {onCancelSelect && (
               <button type="button" className="dayview__cancel" onClick={onCancelSelect}>
-                Cancelar
+                {t.common.cancel}
               </button>
             )}
           </span>
@@ -442,17 +444,17 @@ function DayView({
                     width: `calc(${width}% - 4px)`,
                   }}
                   tabIndex={0}
-                  aria-label={`${item.name}, ${itemMeta(item)}`}
+                  aria-label={`${itemName(item)}, ${itemMeta(item)}`}
                   onClick={() => onOpenItem(item)}
                   onKeyDown={openWithKeyboard(item)}
                 >
                   <strong className="dayview__event-name">
                     {item.subscribed && (
-                      <span className="dayview__event-badge" title="Inscrito">
+                      <span className="dayview__event-badge" title={t.day.subscribedBadge}>
                         ✓
                       </span>
                     )}
-                    {item.name}
+                    {itemName(item)}
                   </strong>
                   <span className="dayview__event-meta">
                     {compact ? `${formatTime(item.beginAt)}–${formatTime(item.endAt)}` : itemMeta(item)}
@@ -469,7 +471,7 @@ function DayView({
                   height: `${((draftBlock.endMin - draftBlock.startMin) / MINUTES_PER_DAY) * 100}%`,
                 }}
               >
-                <strong>Nuevo slot</strong>
+                <strong>{t.day.newSlot}</strong>
                 <span>
                   {formatMinutes(draftBlock.startMin)} – {formatMinutes(draftBlock.endMin)}
                 </span>
@@ -487,7 +489,7 @@ function DayView({
             <div
               className="dayview__now"
               style={{ top: `${nowOffsetPct}%` }}
-              aria-label={`Hora actual ${pad(now.getHours())}:${pad(now.getMinutes())}`}
+              aria-label={t.day.now(`${pad(now.getHours())}:${pad(now.getMinutes())}`)}
             />
           )}
         </div>

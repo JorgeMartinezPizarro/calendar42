@@ -1,4 +1,5 @@
 import { TYPE_COLORS } from '../agendaTypes.ts'
+import { t } from '../i18n/index.ts'
 import './ModeBar.css'
 
 export type Mode = 'events' | 'corrections' | 'exams' | 'slots'
@@ -12,12 +13,12 @@ export interface ModeNote {
 
 export type ModeNotes = Partial<Record<Mode, ModeNote>>
 
-// Cada modo lleva el color de su categoría en la agenda.
-const MODES: { key: Mode; label: string; color: string }[] = [
-  { key: 'events', label: 'Eventos', color: TYPE_COLORS.event },
-  { key: 'corrections', label: 'Correcciones', color: TYPE_COLORS.correction },
-  { key: 'exams', label: 'Exámenes', color: TYPE_COLORS.exam },
-  { key: 'slots', label: 'Crear slots', color: TYPE_COLORS.slot },
+// Cada modo lleva el color de su categoría en la agenda; su etiqueta está en t.modes.
+const MODES: { key: Mode; color: string }[] = [
+  { key: 'events', color: TYPE_COLORS.event },
+  { key: 'corrections', color: TYPE_COLORS.correction },
+  { key: 'exams', color: TYPE_COLORS.exam },
+  { key: 'slots', color: TYPE_COLORS.slot },
 ]
 
 interface ModeBarProps {
@@ -29,7 +30,7 @@ interface ModeBarProps {
 /** Los cuatro modos bajo el calendario, cada uno con su aviso si lo tiene. */
 function ModeBar({ mode, onChange, notes = {} }: ModeBarProps) {
   return (
-    <nav className="modebar" aria-label="Modo">
+    <nav className="modebar" aria-label={t.modes.nav}>
       {MODES.map((m) => {
         const active = mode === m.key
         const note = notes[m.key]
@@ -41,7 +42,7 @@ function ModeBar({ mode, onChange, notes = {} }: ModeBarProps) {
               aria-pressed={active}
               onClick={() => onChange(m.key)}
             >
-              {m.label}
+              {t.modes[m.key]}
             </button>
             {note && (
               <span

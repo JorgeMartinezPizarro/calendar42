@@ -1,0 +1,80 @@
+/* Selector de idioma: la bandera del idioma activo y, al pulsarla, un menú
+   con los dos idiomas debajo, alineado a la derecha. */
+.langtoggle {
+  position: relative;
+  display: inline-flex;
+}
+
+.langtoggle__current {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.langtoggle__current:hover,
+.langtoggle__current:focus-visible,
+.langtoggle__current[aria-expanded='true'] {
+  border-color: #4f8cff;
+}
+
+.langtoggle__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 8.5rem;
+  padding: 4px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  background: #2b2f38;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.langtoggle__option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.langtoggle__option:hover,
+.langtoggle__option:focus-visible {
+  background: rgba(79, 140, 255, 0.15);
+}
+
+.langtoggle__option--active {
+  font-weight: 600;
+  background: rgba(79, 140, 255, 0.1);
+}
+
+.langtoggle svg {
+  flex: none;
+  border-radius: 2px;
+  /* Borde fino para que el blanco de la bandera inglesa no se pierda. */
+  outline: 1px solid rgba(128, 128, 128, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+  .langtoggle__menu {
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  }
+}

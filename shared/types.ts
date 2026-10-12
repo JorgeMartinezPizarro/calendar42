@@ -5,6 +5,25 @@
 /** Tipos de elemento de la agenda. 'free' = franja libre de otro estudiante. */
 export type ItemType = 'event' | 'exam' | 'slot' | 'correction' | 'free'
 
+/** Datos de un examen para redactar su descripción en el idioma de la app. */
+export interface ExamInfo {
+  projects: string[]
+  cursus: string[]
+  ipRange: string | null
+}
+
+/** Datos de una corrección para redactar su nombre y descripción en el idioma de la app. */
+export interface CorrectionInfo {
+  project: string
+  corrector: string | null
+  correcteds: string[]
+  team: string | null
+  /** Nota, si la evaluación ya está entregada. */
+  mark: number | null
+  /** Reservada desde Calendar42 (en el demo). */
+  bookedHere?: boolean
+}
+
 /**
  * Elemento de la agenda tal como lo sirve la API. `D` es el tipo de las fechas:
  * cadenas ISO en el JSON, `Date` una vez en el frontend (ver src/types.ts).
@@ -35,6 +54,8 @@ export interface AgendaItem<D = string> {
   subscribers?: number
   /** Horas antes del inicio a partir de las cuales la intra no deja borrarse. */
   cancellationLimitHours?: number
+  /** Exámenes: proyectos, cursus e IP (la descripción se redacta en el frontend). */
+  examInfo?: ExamInfo
 
   // ---- slots propios y franjas libres ----
   /** Ids de los bloques de 15 min de la intra que forman la franja. */
@@ -46,6 +67,8 @@ export interface AgendaItem<D = string> {
   role?: 'corrector' | 'corrected'
   done?: boolean
   projectId?: number | null
+  /** Datos de la corrección (el nombre y la descripción se redactan en el frontend). */
+  correctionInfo?: CorrectionInfo
 }
 
 /** Aviso de una fuente de la agenda que no se pudo cargar. */
@@ -83,6 +106,15 @@ export interface Coalition {
   cover: string | null
 }
 
+/** Campus del usuario, para saludarle y elegir el idioma de la app. */
+export interface CampusInfo {
+  id: number
+  /** Nombre en la intra: "Madrid", "Barcelona", "Paris"... */
+  name: string
+  /** País en inglés, como lo da la intra: "Spain", "France"... */
+  country: string | null
+}
+
 /** Usuario de la sesión, tal como lo ve el frontend. */
 export interface SessionUser {
   id: number
@@ -90,6 +122,8 @@ export interface SessionUser {
   displayName: string
   image: string | null
   campusId: number | null
+  /** Campus de `campusId`; ausente en sesiones anteriores a este dato. */
+  campus?: CampusInfo | null
   cursusId?: number | null
   cursusName?: string | null
   coalition: Coalition | null

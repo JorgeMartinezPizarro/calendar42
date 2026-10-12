@@ -1,4 +1,6 @@
 import { itemColor } from '../agendaTypes.ts'
+import { t } from '../i18n/index.ts'
+import { itemName } from '../itemText.ts'
 import type { Item, Loadable } from '../types.ts'
 import { formatRange } from '../utils/date.ts'
 import './ItemList.css'
@@ -27,7 +29,7 @@ function ItemList({ title, items, status, emptyText, openItemId = null, onOpenIt
       </h2>
 
       {items.length === 0 ? (
-        <p className="itemlist__empty">{status === 'loading' ? 'Cargando…' : emptyText}</p>
+        <p className="itemlist__empty">{status === 'loading' ? t.common.loading : emptyText}</p>
       ) : (
         <ul className="itemlist__list">
           {items.map((item) => {
@@ -45,11 +47,11 @@ function ItemList({ title, items, status, emptyText, openItemId = null, onOpenIt
                     {item.subscribed ? '✓' : ''}
                   </span>
                   <span className="itemlist__text">
-                    <span className="itemlist__name">{item.name}</span>
+                    <span className="itemlist__name">{itemName(item)}</span>
                     <span className="itemlist__when">
                       {formatRange(item.beginAt, item.endAt)}
-                      {item.subscribed ? ' · inscrito' : ''}
-                      {item.external ? ' · externo' : ''}
+                      {item.subscribed ? ` · ${t.list.subscribed}` : ''}
+                      {item.external ? ` · ${t.list.external}` : ''}
                     </span>
                   </span>
                 </button>

@@ -1,14 +1,9 @@
 import { useState } from 'react'
 import { loginDemo, loginWith42, type LoggedIn } from '../api/auth.ts'
 import { messageOf } from '../api/http.ts'
+import { t } from '../i18n/index.ts'
+import LanguageToggle from './LanguageToggle.tsx'
 import './LoginView.css'
-
-// Motivos que deja el backend en ?auth_error=... si falla el login.
-const AUTH_ERRORS: Record<string, string> = {
-  state: 'La respuesta de la intra no era válida. Inténtalo de nuevo.',
-  exchange: 'No se pudo completar el inicio de sesión con la intra.',
-  access_denied: 'Has cancelado la autorización en la intra.',
-}
 
 interface LoginViewProps {
   authConfigured: boolean
@@ -19,7 +14,10 @@ interface LoginViewProps {
 
 function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }: LoginViewProps) {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(authError ? (AUTH_ERRORS[authError] ?? authError) : null)
+  // Motivo que deja el backend en ?auth_error=... si falla el login (se
+  // traduce al pintar, así sigue el idioma si se cambia con la bandera).
+  const [error, setError] = useState<string | null>(authError ?? null)
+  const errorText = error ? (t.login.errors[error] ?? error) : null
 
   const handleDemo = async () => {
     setBusy(true)
@@ -35,15 +33,16 @@ function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }: Log
   return (
     <div className="login">
       <div className="login__card" role="dialog" aria-labelledby="login-title">
+        <LanguageToggle className="login__lang" />
         <div className="login__logo" aria-hidden="true">
           42
         </div>
         <h1 id="login-title" className="login__title">
           Calendar42
         </h1>
-        <p className="login__subtitle">Calendario de eventos para estudiantes de 42 Madrid</p>
+        <p className="login__subtitle">{t.login.subtitle}</p>
 
-        {error && <p className="login__error">{error}</p>}
+        {errorText && <p className="login__error">{errorText}</p>}
 
         <button
           type="button"
@@ -51,14 +50,11 @@ function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }: Log
           onClick={loginWith42}
           disabled={!authConfigured || busy}
         >
-          Iniciar sesión con 42
+          {t.login.with42}
         </button>
 
         {!authConfigured && (
-          <p className="login__hint">
-            El servidor no tiene configurada la app OAuth de 42. Añade <code>FT_CLIENT_ID</code> y{' '}
-            <code>FT_CLIENT_SECRET</code> en <code>.env</code> para iniciar sesión con la intra.
-          </p>
+          <p className="login__hint">{t.login.notConfigured}</p>
         )}
 
         {demoAvailable && (
@@ -67,9 +63,9 @@ function LoginView({ authConfigured, demoAvailable, authError, onLoggedIn }: Log
             className="login__button login__button--secondary"
             onClick={handleDemo}
             disabled={busy}
-            title="Datos de ejemplo, sin tocar la intra"
+            title={t.login.demoTitle}
           >
-            {busy ? 'Entrando…' : 'Entrar en modo demo'}
+            {busy ? t.login.demoBusy : t.login.demo}
           </button>
         )}
       </div>

@@ -36,6 +36,7 @@ Calendar42 une esas cuatro vías en una agenda: eventos, exámenes, slots y corr
 - **Sin solapes**: ninguna acción que añade algo a tu agenda (apuntarte, reservar, crear un slot) se permite si choca con lo que ya tienes. El botón sale desactivado con el motivo, y los errores de la intra se muestran junto a él.
 - **Exportar** tu agenda a `.ics` para importarla en Google Calendar, Outlook o Apple Calendar; al reimportarla se actualiza sin duplicar.
 - **Móvil**: dos vistas, el mes con los modos y el día a pantalla completa.
+- **Cualquier campus**: la agenda es la del campus de quien entra, y le saluda por su nombre. Español o inglés, con un selector de bandera en la cabecera; por defecto, español en los campus de España e inglés en el resto.
 
 <br clear="right">
 
@@ -146,5 +147,6 @@ src/      React: Calendar, ModeBar (los cuatro modos), ProjectPicker, ItemList,
           SlotCreator, DayView (con arrastre para crear slots), ItemPopover,
           LoginView; carga de datos y acciones sobre la intra en App.tsx.
           api/ llama a la API propia; subscription.ts tiene las reglas de
-          cada botón (qué se puede hacer y, si no, por qué)
+          cada botón (qué se puede hacer y, si no, por qué); i18n/ tiene
+          los textos en español (es.ts) e inglés (en.ts)
 ```

@@ -9,6 +9,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { NextFunction, Request, Response } from 'express'
+import { msg } from './messages.ts'
 import { asHttpError, type Session } from './types.ts'
 
 /**
@@ -192,7 +193,7 @@ export function sessionMiddleware(req: Request, _res: Response, next: NextFuncti
 /** Middleware: responde 401 si no hay sesión. */
 export function requireSession(req: Request, res: Response, next: NextFunction): void {
   if (!req.session) {
-    res.status(401).json({ error: 'No has iniciado sesión' })
+    res.status(401).json({ error: msg(req).notLoggedIn })
     return
   }
   next()

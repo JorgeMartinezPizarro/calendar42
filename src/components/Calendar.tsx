@@ -1,6 +1,7 @@
-import { AGENDA_TYPES } from '../agendaTypes.ts'
+import { AGENDA_TYPES, typeLabel } from '../agendaTypes.ts'
+import { t } from '../i18n/index.ts'
 import type { ItemType } from '../types.ts'
-import { WEEKDAY_LABELS, addMonths, formatMonthYear, getMonthGrid, isSameDay, toDateKey } from '../utils/date.ts'
+import { addMonths, formatMonthYear, getMonthGrid, isSameDay, toDateKey } from '../utils/date.ts'
 import './Calendar.css'
 
 /** Repositorio del proyecto: el enlace de la cabecera del calendario. */
@@ -58,17 +59,17 @@ function Calendar({
   }
 
   return (
-    <section className="calendar" aria-label="Calendario mensual">
+    <section className="calendar" aria-label={t.calendar.label}>
       <header className="calendar__header">
-        <button type="button" onClick={goToPrev} aria-label="Mes anterior">
+        <button type="button" onClick={goToPrev} aria-label={t.calendar.prevMonth}>
           ‹
         </button>
         <h2 className="calendar__title">{formatMonthYear(viewDate)}</h2>
-        <button type="button" onClick={goToNext} aria-label="Mes siguiente">
+        <button type="button" onClick={goToNext} aria-label={t.calendar.nextMonth}>
           ›
         </button>
         <button type="button" className="calendar__today" onClick={goToToday}>
-          Hoy
+          {t.calendar.today}
         </button>
         {onExport && (
           <button
@@ -76,11 +77,11 @@ function Calendar({
             className="calendar__export"
             onClick={onExport}
             disabled={exporting}
-            title="Descarga tu agenda en .ics para importarla en Google Calendar, Outlook o Apple Calendar"
-            aria-label="Exportar la agenda en formato iCalendar (.ics)"
+            title={t.export.title}
+            aria-label={t.export.ariaLabel}
           >
             <span aria-hidden="true">⤓</span>
-            <span className="calendar__export-label">{exporting ? 'Exportando…' : 'Exportar'}</span>
+            <span className="calendar__export-label">{exporting ? t.export.busy : t.export.button}</span>
           </button>
         )}
         <a
@@ -88,8 +89,8 @@ function Calendar({
           href={SOURCE_URL}
           target="_blank"
           rel="noopener noreferrer"
-          title="Código fuente en GitHub"
-          aria-label="Código fuente en GitHub"
+          title={t.source}
+          aria-label={t.source}
         >
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
             <path d={GITHUB_PATH} />
@@ -107,8 +108,8 @@ function Calendar({
       )}
 
       <div className="calendar__weekdays" role="row">
-        {WEEKDAY_LABELS.map((label) => (
-          <span key={label} className="calendar__weekday">
+        {t.weekdays.map((label, i) => (
+          <span key={i} className="calendar__weekday">
             {label}
           </span>
         ))}
@@ -142,14 +143,14 @@ function Calendar({
               aria-pressed={isSelected}
               aria-current={isToday ? 'date' : undefined}
               aria-label={
-                hasItems ? `${date.getDate()}, ${present.map((t) => t.label.toLowerCase()).join(', ')}` : undefined
+                hasItems ? `${date.getDate()}, ${present.map((p) => typeLabel(p.type).toLowerCase()).join(', ')}` : undefined
               }
             >
               <span className="calendar__day-number">{date.getDate()}</span>
               {hasItems && (
                 <span className="calendar__marks" aria-hidden="true">
-                  {present.map((t) => (
-                    <span key={t.type} className="calendar__mark" style={{ background: t.color }} />
+                  {present.map((p) => (
+                    <span key={p.type} className="calendar__mark" style={{ background: p.color }} />
                   ))}
                 </span>
               )}

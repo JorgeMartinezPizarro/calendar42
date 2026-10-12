@@ -2,6 +2,7 @@
 // shared/types.ts.
 
 import type { SessionUser } from '../shared/types.ts'
+import type { MessageCode } from './messages.ts'
 import type { DemoState } from './mock.ts'
 
 /** Tokens OAuth de la intra de una sesión real. */
@@ -38,6 +39,8 @@ export interface HttpError extends Error {
   body?: string
   /** Fallo pasajero (intra caída, 429...): se puede reintentar. */
   transient?: boolean
+  /** Mensaje para el usuario, traducible (ver messages.ts); sin él se usa `message`. */
+  code?: MessageCode
 }
 
 /** Crea un HttpError con los datos que se pasen. */

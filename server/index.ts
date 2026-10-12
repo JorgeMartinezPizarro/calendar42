@@ -63,6 +63,7 @@ import {
   sessionOf,
   setCookie,
 } from './sessions.ts'
+import { msg, render } from './messages.ts'
 import { asHttpError, httpError, type HttpError, type Session } from './types.ts'
 
 const app = express()
@@ -108,7 +109,7 @@ app.use('/api', (req, res, next) => {
     next()
     return
   }
-  res.status(403).json({ error: 'Origen no permitido' })
+  res.status(403).json({ error: msg(req).originNotAllowed })
 })
 
 app.use(express.json())
@@ -186,15 +187,20 @@ function demoStateOf(session: Session): DemoState {
 function sessionExpired(req: Request, res: Response): void {
   destroySession(req.sessionId)
   clearCookie(res, SESSION_COOKIE)
-  res.status(401).json({ error: 'La sesión ha caducado, vuelve a iniciar sesión' })
+  res.status(401).json({ error: msg(req).sessionExpired })
+}
+
+/** Texto para el usuario de un error, en el idioma de la petición. */
+function errorText(req: Request, err: HttpError): string {
+  return err.code ? render(msg(req), err.code) : err.message
 }
 
 /** 409 si lo que se va a añadir a la agenda demo pisa algo que ya está. */
-function rejectDemoOverlap(res: Response, session: Session, begin: Date, end: Date): boolean {
+function rejectDemoOverlap(req: Request, res: Response, session: Session, begin: Date, end: Date): boolean {
   const overlaps = mockOverlaps(demoStateOf(session), begin, end)
   if (!overlaps.length) return false
   const names = overlaps.map((it) => it.name).join(', ')
-  res.status(409).json({ error: `Se solapa con ${names}` })
+  res.status(409).json({ error: msg(req).overlaps(names) })
   return true
 }
 
@@ -219,15 +225,16 @@ function sendIntraFailure(
   const status = (err.status != null ? STATUS_FOR[err.status] : undefined) ?? 502
   // Sin el scope necesario la intra responde 403 "Insufficient scope".
   const missingScope = err.status === 403 && /scope/i.test(String(err.reason))
+  const m = msg(req)
   let message: string
   if (missingScope) {
-    message = `La sesión no tiene el scope que pide la intra (${err.reason}). Actívalo en la app OAuth de la intra, cierra sesión y vuelve a entrar.`
+    message = m.missingScope(String(err.reason))
   } else if (isNotAuthorized(err)) {
-    message = `La intra no autoriza esta operación con tu cuenta (${err.status}: ${err.reason}).${hint ? ` ${hint}` : ''}`
+    message = m.notAuthorized(err.status, String(err.reason), hint)
   } else if (err.reason) {
-    message = `La intra no ha aceptado la operación: ${err.reason}`
+    message = m.notAccepted(err.reason)
   } else {
-    message = err.message
+    message = errorText(req, err)
   }
   res.status(status).json({ error: message })
 }
@@ -237,7 +244,7 @@ function sendReadFailure(req: Request, res: Response, error: unknown, what: stri
   const err = asHttpError(error)
   console.error(`[${what}]`, err.message)
   if (err.status === 401) return sessionExpired(req, res)
-  res.status(502).json({ error: err.message })
+  res.status(502).json({ error: errorText(req, err) })
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +270,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/auth/me', (req, res) => {
   if (!req.session) {
     res.status(401).json({
-      error: 'No has iniciado sesión',
+      error: msg(req).notLoggedIn,
       authConfigured: hasAppCredentials(),
       demoAvailable: true,
     })
@@ -277,9 +284,9 @@ app.get('/api/auth/me', (req, res) => {
 })
 
 // Paso 1: redirigir a la pantalla de autorización de la intra.
-app.get('/api/auth/login', (_req, res) => {
+app.get('/api/auth/login', (req, res) => {
   if (!hasAppCredentials()) {
-    res.status(503).json({ error: 'Faltan FT_CLIENT_ID y FT_CLIENT_SECRET en el servidor (.env)' })
+    res.status(503).json({ error: msg(req).oauthNotConfigured })
     return
   }
   const state = randomUUID()
@@ -326,6 +333,8 @@ app.post('/api/auth/demo', (req, res) => {
     displayName: 'Estudiante demo',
     image: null,
     campusId: DEFAULT_CAMPUS_ID,
+    // El demo es de 42 Madrid: sus datos de ejemplo son de ese campus.
+    campus: { id: DEFAULT_CAMPUS_ID, name: 'Madrid', country: 'Spain' },
     coalition: mockCoalition(),
   }
   const id = createSession({ user, tokens: null, demo: true, demoState: newDemoState() }, DEMO_SESSION_TTL_MS)
@@ -356,11 +365,11 @@ app.get('/api/agenda', requireSession, async (req, res) => {
   const to = parseDate(req.query.to, new Date(now.getTime() + 60 * 86_400_000))
 
   if (!from || !to) {
-    res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
+    res.status(400).json({ error: msg(req).invalidRange })
     return
   }
   if (to <= from) {
-    res.status(400).json({ error: '"to" debe ser posterior a "from"' })
+    res.status(400).json({ error: msg(req).toBeforeFrom })
     return
   }
 
@@ -424,10 +433,7 @@ app.get('/api/projects', requireSession, async (req, res) => {
     const err = asHttpError(error)
     console.error('[projects]', err.message)
     if (err.status === 401) return sessionExpired(req, res)
-    const message =
-      err.status === 403
-        ? 'La intra no deja leer tus proyectos con esta sesión. Cierra sesión y vuelve a entrar.'
-        : err.message
+    const message = err.status === 403 ? msg(req).projectsForbidden : errorText(req, err)
     res.status(err.status === 403 ? 403 : 502).json({ error: message })
   }
 })
@@ -461,7 +467,7 @@ function idParam(req: Request): number | null {
 async function setSubscription(req: Request, res: Response, subscribed: boolean): Promise<void> {
   const eventId = idParam(req)
   if (eventId == null) {
-    res.status(400).json({ error: 'Id de evento inválido' })
+    res.status(400).json({ error: msg(req).invalidEventId })
     return
   }
   const session = sessionOf(req)
@@ -480,9 +486,7 @@ async function setSubscription(req: Request, res: Response, subscribed: boolean)
     res.json({ ok: true, subscribed, subscribers: event?.subscribers ?? null })
   } catch (err) {
     sendIntraFailure(req, res, err, `events ${subscribed ? 'alta' : 'baja'} ${eventId}`, {
-      hint:
-        'Puede que el evento no admita inscripciones para tu cursus o campus, o que la API no deje a los estudiantes apuntarse. ' +
-        'Comprueba si puedes apuntarte a ese mismo evento desde la web de la intra.',
+      hint: msg(req).hintEventSignup,
     })
   }
 }
@@ -500,17 +504,17 @@ app.post('/api/slots', requireSession, async (req, res) => {
   const begin = parseDate(body.beginAt, null)
   const end = parseDate(body.endAt, null)
   if (!begin || !end || end <= begin) {
-    res.status(400).json({ error: 'Franja inválida: hacen falta beginAt y endAt (ISO), con fin posterior al inicio' })
+    res.status(400).json({ error: msg(req).invalidSlotRange })
     return
   }
   const session = sessionOf(req)
   try {
     let items: AgendaItem[]
     if (session.demo) {
-      if (rejectDemoOverlap(res, session, begin, end)) return
+      if (rejectDemoOverlap(req, res, session, begin, end)) return
       const near = mockSlotsTooClose(demoStateOf(session), begin, end)
       if (near.length) {
-        res.status(409).json({ error: `Deja ${SLOT_GAP_MINUTES} minutos libres entre slots: queda pegado a otro slot` })
+        res.status(409).json({ error: msg(req).slotGap(SLOT_GAP_MINUTES) })
         return
       }
       items = mockCreateSlot(demoStateOf(session), { begin, end })
@@ -535,7 +539,7 @@ app.delete('/api/slots', requireSession, async (req, res) => {
   const raw = bodyOf(req).ids
   const ids = Array.isArray(raw) ? raw.map(Number) : []
   if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
-    res.status(400).json({ error: 'Hacen falta los ids de los bloques del slot' })
+    res.status(400).json({ error: msg(req).slotIdsRequired })
     return
   }
   const session = sessionOf(req)
@@ -563,11 +567,11 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
   const from = parseDate(req.query.from, now)
   const to = parseDate(req.query.to, new Date(now.getTime() + 30 * 86_400_000))
   if (projectId == null) {
-    res.status(400).json({ error: 'Id de proyecto inválido' })
+    res.status(400).json({ error: msg(req).invalidProjectId })
     return
   }
   if (!from || !to || to <= from) {
-    res.status(400).json({ error: 'Parámetros from/to inválidos (usa fechas ISO)' })
+    res.status(400).json({ error: msg(req).invalidRange })
     return
   }
   const session = sessionOf(req)
@@ -585,7 +589,7 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
     res.json({ items: value })
   } catch (err) {
     sendIntraFailure(req, res, err, `slots libres ${projectId}`, {
-      hint: 'Puede que la API no deje a los estudiantes consultar los slots de un proyecto.',
+      hint: msg(req).hintProjectSlots,
     })
   }
 })
@@ -601,14 +605,14 @@ app.post('/api/corrections', requireSession, async (req, res) => {
   const begin = parseDate(body.beginAt, null)
   const correctorId = body.correctorId ? Number(body.correctorId) : null
   if (!Number.isInteger(projectId) || projectId <= 0 || !Number.isInteger(teamId) || teamId <= 0 || !begin) {
-    res.status(400).json({ error: 'Hacen falta projectId, teamId y beginAt (ISO)' })
+    res.status(400).json({ error: msg(req).bookingParamsRequired })
     return
   }
   const session = sessionOf(req)
   try {
     let item: AgendaItem | null = null
     if (session.demo) {
-      if (rejectDemoOverlap(res, session, begin, new Date(begin.getTime() + 30 * 60_000))) return
+      if (rejectDemoOverlap(req, res, session, begin, new Date(begin.getTime() + 30 * 60_000))) return
       item = mockBookCorrection(demoStateOf(session), { projectId, beginAt: begin })
       saveSession()
     } else {
@@ -623,7 +627,7 @@ app.post('/api/corrections', requireSession, async (req, res) => {
     res.json({ ok: true, item })
   } catch (err) {
     sendIntraFailure(req, res, err, `corrección ${projectId}`, {
-      hint: 'La reserva de correcciones puede estar reservada al personal en la API; en ese caso hay que agendarla desde la intra.',
+      hint: msg(req).hintBooking,
     })
   }
 })
@@ -638,14 +642,12 @@ app.post('/api/corrections', requireSession, async (req, res) => {
 function setExamSubscription(req: Request, res: Response, subscribed: boolean): void {
   const examId = idParam(req)
   if (examId == null) {
-    res.status(400).json({ error: 'Id de examen inválido' })
+    res.status(400).json({ error: msg(req).invalidExamId })
     return
   }
   const session = sessionOf(req)
   if (!session.demo) {
-    res.status(403).json({
-      error: 'Inscripción a exámenes desactivada: el rol de estudiante no alcanza, se requieren permisos del staff.',
-    })
+    res.status(403).json({ error: msg(req).examSignupDisabled })
     return
   }
   mockSetExamSubscription(demoStateOf(session), examId, subscribed)

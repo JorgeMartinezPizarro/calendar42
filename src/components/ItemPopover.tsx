@@ -1,46 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { itemColor } from '../agendaTypes.ts'
+import { t } from '../i18n/index.ts'
+import { itemDescription, itemName } from '../itemText.ts'
 import { MIN_SLOT_MINUTES, type BookingState, type ButtonState, type SubscriptionState } from '../subscription.ts'
-import type { ActionState, Item, ItemType, Project } from '../types.ts'
+import type { ActionState, Item, Project } from '../types.ts'
 import { formatRange, formatTime } from '../utils/date.ts'
 import Markdown from './Markdown.tsx'
 import './ItemPopover.css'
 
-const TYPE_LABELS: Record<ItemType, string> = {
-  event: 'Evento',
-  exam: 'Examen',
-  slot: 'Slot de corrección',
-  correction: 'Corrección',
-  free: 'Slot libre para corrección',
-}
-
-// Subtipos de evento de la intra.
-const KIND_LABELS: Record<string, string> = {
-  conference: 'Conferencia',
-  meetup: 'Meetup',
-  workshop: 'Taller',
-  atelier: 'Taller',
-  rush: 'Rush',
-  hackathon: 'Hackathon',
-  extern: 'Externo',
-  association: 'Asociación',
-  partnership: 'Partner',
-  challenge: 'Reto',
-  piscine: 'Piscina',
-  pedago: 'Pedagogía',
-}
-
 function headline(item: Item): string {
-  const type = TYPE_LABELS[item.type] ?? item.type
-  const kind = item.kind && item.kind !== item.type ? (KIND_LABELS[item.kind] ?? item.kind) : null
+  const type = t.itemType[item.type] ?? item.type
+  const kind = item.kind && item.kind !== item.type ? (t.kinds[item.kind] ?? item.kind) : null
   return kind ? `${type} · ${kind}` : type
 }
 
 function capacity(item: Item): string | null {
   if (item.type !== 'event' && item.type !== 'exam') return null
   const n = item.subscribers ?? 0
-  const people = `${n} inscrito${n === 1 ? '' : 's'}`
-  return item.maxPeople ? `${people} · ${item.maxPeople} plazas` : people
+  const people = t.popover.people(n)
+  return item.maxPeople ? `${people} · ${t.popover.seats(item.maxPeople)}` : people
 }
 
 /**
@@ -128,6 +106,7 @@ function ItemPopover({
   }, [onClose])
 
   const color = itemColor(item)
+  const description = itemDescription(item)
   const cap = capacity(item)
   const busy = Boolean(action?.busy)
   const slotBusy = Boolean(conflicts?.length)
@@ -151,46 +130,46 @@ function ItemPopover({
       className={`popover popover--${item.type}`}
       style={{ '--pv-color': color }}
       role="dialog"
-      aria-label={item.name}
+      aria-label={itemName(item)}
       tabIndex={-1}
     >
-      <button type="button" className="popover__close" onClick={onClose} aria-label="Cerrar">
+      <button type="button" className="popover__close" onClick={onClose} aria-label={t.common.close}>
         ×
       </button>
 
       <div className="popover__head">
         <span className="popover__kind">{headline(item)}</span>
         {item.signupUrl && (
-          <span className="popover__badge popover__badge--external">Inscripción externa</span>
+          <span className="popover__badge popover__badge--external">{t.popover.externalSignup}</span>
         )}
-        {item.subscribed && <span className="popover__badge">Inscrito</span>}
+        {item.subscribed && <span className="popover__badge">{t.popover.subscribed}</span>}
       </div>
-      <h3 className="popover__title">{item.name}</h3>
+      <h3 className="popover__title">{itemName(item)}</h3>
 
       <dl className="popover__meta">
-        <dt>Cuándo</dt>
+        <dt>{t.popover.when}</dt>
         <dd>{formatRange(item.beginAt, item.endAt)}</dd>
         {item.location && (
           <>
-            <dt>Dónde</dt>
+            <dt>{t.popover.where}</dt>
             <dd>{item.location}</dd>
           </>
         )}
         {cap && (
           <>
-            <dt>Aforo</dt>
+            <dt>{t.popover.capacity}</dt>
             <dd>{cap}</dd>
           </>
         )}
         {item.corrector?.login && (
           <>
-            <dt>Corrector</dt>
+            <dt>{t.popover.corrector}</dt>
             <dd>{item.corrector.login}</dd>
           </>
         )}
       </dl>
 
-      {item.description && <Markdown className="popover__description" text={item.description} />}
+      {description && <Markdown className="popover__description" text={description} />}
 
       {hasActions && (
         <div className="popover__actions">
@@ -201,7 +180,7 @@ function ItemPopover({
               disabled={!subscription.enabled || busy}
               onClick={() => onToggleSubscription(item)}
             >
-              {busy ? 'Un momento…' : subscription.action === 'subscribe' ? 'Apuntarme' : 'Borrarme'}
+              {busy ? t.common.oneMoment : subscription.action === 'subscribe' ? t.popover.subscribe : t.popover.unsubscribe}
             </button>
           )}
 
@@ -213,7 +192,7 @@ function ItemPopover({
               rel="noopener noreferrer"
               title={item.signupUrl}
             >
-              Inscribirse en su web ↗
+              {t.popover.signupOnWeb}
             </a>
           )}
 
@@ -221,7 +200,7 @@ function ItemPopover({
             <>
               {starts.length > 1 && (
                 <label className="popover__start">
-                  Empezar a las
+                  {t.popover.startAt}
                   <select
                     value={startAt.toISOString()}
                     disabled={busy}
@@ -230,7 +209,7 @@ function ItemPopover({
                     {starts.map((d) => (
                       <option key={d.toISOString()} value={d.toISOString()}>
                         {formatTime(d)}
-                        {booking.stateAt(d).overlap ? ' · choca' : ''}
+                        {booking.stateAt(d).overlap ? t.popover.clashes : ''}
                       </option>
                     ))}
                   </select>
@@ -243,10 +222,10 @@ function ItemPopover({
                 onClick={() => onBook(item, startAt)}
               >
                 {busy
-                  ? 'Un momento…'
+                  ? t.common.oneMoment
                   : booking.project?.closed
-                    ? `Agendar corrección de ${booking.project.name}`
-                    : 'Agendar corrección'}
+                    ? t.popover.bookProject(booking.project.name)
+                    : t.popover.book}
               </button>
             </>
           )}
@@ -258,16 +237,16 @@ function ItemPopover({
               disabled={!slotDelete.enabled || busy}
               onClick={() => onDeleteSlot(item)}
             >
-              {busy ? 'Un momento…' : 'Borrar slot'}
+              {busy ? t.common.oneMoment : t.popover.deleteSlot}
             </button>
           )}
 
           {conflicts && (
             <span
               className={`popover__slot popover__slot--${slotBusy ? 'busy' : 'free'}`}
-              title={slotBusy ? 'Se solapa con algo de tu agenda' : 'No se solapa con nada de tu agenda'}
+              title={slotBusy ? t.popover.slotBusyTitle : t.popover.slotFreeTitle}
             >
-              {slotBusy ? 'Slot ocupado' : 'Slot libre'}
+              {slotBusy ? t.popover.slotBusy : t.popover.slotFree}
             </span>
           )}
 
@@ -277,8 +256,8 @@ function ItemPopover({
 
       {conflicts && slotBusy && (
         <p className="popover__conflicts">
-          Solapa con{' '}
-          {conflicts.map((c) => `${c.name} (${formatTime(c.beginAt)}–${formatTime(c.endAt)})`).join(', ')}.
+          {t.popover.overlapsWith}{' '}
+          {conflicts.map((c) => `${itemName(c)} (${formatTime(c.beginAt)}–${formatTime(c.endAt)})`).join(', ')}.
         </p>
       )}
     </div>

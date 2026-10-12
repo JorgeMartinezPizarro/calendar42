@@ -37,7 +37,7 @@ interface RawMe {
   displayname?: string
   image?: { link?: string; versions?: { small?: string } }
   campus_users?: { campus_id: number; is_primary: boolean }[]
-  campus?: { id: number }[]
+  campus?: { id: number; name?: string; country?: string }[]
   cursus_users?: RawCursusUser[]
 }
 
@@ -154,6 +154,7 @@ async function tokenRequest(params: Record<string, string>): Promise<Tokens> {
   if (!res.ok) {
     throw httpError(`La intra rechazó la petición de token (${res.status})`, {
       status: res.status,
+      code: { key: 'tokenRejected', args: [res.status] },
       transient: res.status === 429 || res.status >= 500,
     })
   }
@@ -305,6 +306,7 @@ export async function intraRequest<T>(
     throw httpError(`La intra no respondió en ${label} (${e.cause?.code ?? e.message})`, {
       status: 503,
       path,
+      code: { key: 'intraUnreachable', args: [label] },
       transient: true,
     })
   }
@@ -313,6 +315,7 @@ export async function intraRequest<T>(
     throw httpError(`La intra no está disponible ahora mismo (${res.status})`, {
       status: res.status,
       path,
+      code: { key: 'intraUnavailable', args: [res.status] },
       transient: true,
     })
   }
@@ -324,7 +327,7 @@ export async function intraRequest<T>(
       const text = (await res.text()).trim()
       rawBody = text.slice(0, 500)
       if (text.startsWith('<')) {
-        reason = res.status === 404 ? 'ruta inexistente' : 'respuesta HTML'
+        reason = res.status === 404 ? 'not found' : 'HTML response'
       } else if (text) {
         try {
           const parsed = JSON.parse(text) as Record<string, unknown>
@@ -343,6 +346,7 @@ export async function intraRequest<T>(
       status: res.status,
       path,
       reason,
+      code: { key: 'intraError', args: [label, res.status, reason.slice(0, 200)] },
       body: rawBody,
       transient: res.status === 429 || res.status >= 500,
     })
@@ -388,6 +392,7 @@ export async function fetchMe(accessToken: string): Promise<SessionUser> {
   const me = await intraGet<RawMe>(accessToken, '/me')
   const primary = me.campus_users?.find((c) => c.is_primary)
   const campusId = primary?.campus_id ?? me.campus?.[0]?.id ?? null
+  const rawCampus = me.campus?.find((c) => c.id === campusId)
   const cursus = pickCurrentCursus(me.cursus_users)
   return {
     id: me.id,
@@ -395,6 +400,7 @@ export async function fetchMe(accessToken: string): Promise<SessionUser> {
     displayName: me.displayname ?? me.login,
     image: me.image?.versions?.small ?? me.image?.link ?? null,
     campusId,
+    campus: rawCampus ? { id: rawCampus.id, name: rawCampus.name ?? '', country: rawCampus.country ?? null } : null,
     cursusId: cursus?.id ?? null,
     cursusName: cursus?.name ?? null,
     coalition: await fetchMyCoalition(accessToken, me.id, { campusId, cursusId: cursus?.id ?? null }),
@@ -536,6 +542,7 @@ export function normalizeExam(raw: RawExam): AgendaItem {
     kind: 'exam',
     name: raw.name,
     description: details.join('\n'),
+    examInfo: { projects, cursus, ipRange: raw.ip_range ?? null },
     location: raw.location ?? '',
     beginAt: raw.begin_at,
     endAt: raw.end_at,
@@ -632,6 +639,13 @@ export function normalizeScaleTeam(raw: RawScaleTeam, myId: number, projectName:
     role,
     done: Boolean(raw.filled_at),
     projectId: raw.team?.project_id ?? null,
+    correctionInfo: {
+      project,
+      corrector: correctorLogin,
+      correcteds: correctedLogins,
+      team: raw.team?.name ?? null,
+      mark: raw.filled_at ? (raw.final_mark ?? null) : null,
+    },
   }
 }
 
@@ -752,7 +766,9 @@ export async function unsubscribeFromEvent(
   const subscription = (Array.isArray(list) ? list : []).find(
     (eu) => eu.event_id === eventId || eu.event?.id === eventId,
   )
-  if (!subscription) throw httpError('No estás inscrito en este evento', { status: 404 })
+  if (!subscription) {
+    throw httpError('No estás inscrito en este evento', { status: 404, code: { key: 'notSubscribed' } })
+  }
   await intraRequest(accessToken, `/events_users/${subscription.id}`, { method: 'DELETE' })
   return fetchEventOrNull(accessToken, eventId)
 }
@@ -920,7 +936,9 @@ export async function bookCorrection(
   const scales = await intraGet<{ id: number; is_primary?: boolean }[]>(accessToken, `/projects/${projectId}/scales`)
   const list = Array.isArray(scales) ? scales : []
   const scale = list.find((s) => s.is_primary) ?? list[0]
-  if (!scale) throw httpError('El proyecto no tiene escala de evaluación en la intra', { status: 404 })
+  if (!scale) {
+    throw httpError('El proyecto no tiene escala de evaluación en la intra', { status: 404, code: { key: 'noScale' } })
+  }
   const scaleTeam: Record<string, string | number> = { begin_at: beginAt, team_id: teamId, scale_id: scale.id }
   if (correctorId) scaleTeam.user_id = correctorId
   return intraRequest(accessToken, '/scale_teams', { method: 'POST', body: { scale_team: scaleTeam } })

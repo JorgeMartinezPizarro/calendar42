@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.ts'
 import { MIN_SLOT_MINUTES, SLOT_GAP_MINUTES, slotCreateState } from '../subscription.ts'
 import type { Item, TimeRange } from '../types.ts'
 import { formatRange, formatTime } from '../utils/date.ts'
@@ -41,7 +42,7 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
         type="button"
         onClick={() => adjust(edge, -15)}
         disabled={action.busy}
-        aria-label={`${label} 15 minutos antes`}
+        aria-label={t.slots.earlier(label)}
       >
         −15
       </button>
@@ -50,7 +51,7 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
         type="button"
         onClick={() => adjust(edge, 15)}
         disabled={action.busy}
-        aria-label={`${label} 15 minutos después`}
+        aria-label={t.slots.later(label)}
       >
         +15
       </button>
@@ -58,25 +59,20 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
   )
 
   return (
-    <section className="slotcreator" aria-label="Crear slot de corrección">
-      <h2 className="slotcreator__title">Crear slot</h2>
+    <section className="slotcreator" aria-label={t.slots.label}>
+      <h2 className="slotcreator__title">{t.slots.title}</h2>
 
       {!pending && (
-        <p className="slotcreator__hint">
-          Elige un día y marca cuándo puedes corregir: arrastrando sobre las horas con el ratón o tocando una
-          hora con el dedo. Luego ajusta la franja con los tiradores o con los botones de 15 minutos. Los slots
-          van en bloques de 15 minutos, duran al menos {MIN_SLOT_MINUTES} y entre dos slots deben quedar
-          {SLOT_GAP_MINUTES} minutos libres.
-        </p>
+        <p className="slotcreator__hint">{t.slots.hint(MIN_SLOT_MINUTES, SLOT_GAP_MINUTES)}</p>
       )}
 
       {pending && state ? (
         <div className="slotcreator__pending">
-          <p className="slotcreator__range">Nuevo slot · {formatRange(pending.beginAt, pending.endAt)}</p>
+          <p className="slotcreator__range">{t.slots.pending(formatRange(pending.beginAt, pending.endAt))}</p>
           {onAdjust && (
             <div className="slotcreator__steps">
-              {stepper(onAdjust, 'start', 'Inicio', pending.beginAt)}
-              {stepper(onAdjust, 'end', 'Fin', pending.endAt)}
+              {stepper(onAdjust, 'start', t.slots.start, pending.beginAt)}
+              {stepper(onAdjust, 'end', t.slots.end, pending.endAt)}
             </div>
           )}
           <div className="slotcreator__actions">
@@ -86,7 +82,7 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
               disabled={!state.enabled || action.busy}
               onClick={onCreate}
             >
-              {action.busy ? 'Creando…' : 'Crear slot'}
+              {action.busy ? t.slots.creating : t.slots.create}
             </button>
             <button
               type="button"
@@ -94,7 +90,7 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
               disabled={action.busy}
               onClick={onCancel}
             >
-              Cancelar
+              {t.common.cancel}
             </button>
             {state.reason && !action.error && <span className="slotcreator__reason">{state.reason}</span>}
             {action.error && (
@@ -105,10 +101,7 @@ function SlotCreator({ pending, action, now, items = [], onCreate, onCancel, onA
           </div>
         </div>
       ) : action.created ? (
-        <p className="slotcreator__ok">
-          Slot creado: {formatRange(action.created.beginAt, action.created.endAt)}. Puedes borrarlo desde su
-          ficha.
-        </p>
+        <p className="slotcreator__ok">{t.slots.created(formatRange(action.created.beginAt, action.created.endAt))}</p>
       ) : null}
     </section>
   )
