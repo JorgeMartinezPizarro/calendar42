@@ -16,7 +16,7 @@ dist-ssr
 .env
 
 # Sesiones de desarrollo (contienen tokens de usuario)
-server/.sessions.json
+server/.sessions.json*
 
 # Editor directories and files
 .vscode/*

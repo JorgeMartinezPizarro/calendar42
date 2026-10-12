@@ -167,6 +167,24 @@ async function tokenRequest(params: Record<string, string>): Promise<Tokens> {
   }
 }
 
+/**
+ * Revoca un token de usuario en la intra (RFC 7009): deja de valer al momento.
+ * La intra responde 200 también si el token ya no era válido.
+ */
+export async function revokeToken(token: string): Promise<void> {
+  recordCall()
+  const res = await fetch(`${INTRA_BASE}/oauth/revoke`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.FT_CLIENT_ID ?? '',
+      client_secret: process.env.FT_CLIENT_SECRET ?? '',
+      token,
+    }),
+  })
+  if (!res.ok) throw httpError(`La intra no revocó el token (${res.status})`, { status: res.status })
+}
+
 export function exchangeCode(code: string): Promise<Tokens> {
   return tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri() })
 }

@@ -50,9 +50,9 @@ const sessions: Map<string, Session> = loadSessions()
 function loadSessions(): Map<string, Session> {
   if (!existsSync(STORE_FILE)) return new Map()
   try {
-    const stored = JSON.parse(readFileSync(STORE_FILE, 'utf8')) as Record<string, Session>
-    const now = Date.now()
-    return new Map(Object.entries(stored).filter(([, s]) => s.expiresAt > now))
+    // También las caducadas: el primer barrido las descarta y revoca sus tokens
+    // (ver onSessionDiscarded), en vez de dejarlos vivos en la intra.
+    return new Map(Object.entries(JSON.parse(readFileSync(STORE_FILE, 'utf8')) as Record<string, Session>))
   } catch (err) {
     console.warn('[sessions] no se pudo leer el almacén, empezando vacío:', asHttpError(err).message)
     return new Map()
@@ -89,16 +89,33 @@ export function flushSessions(): void {
   writeStore()
 }
 
+/**
+ * Qué hacer con una sesión que se descarta (cierre, nuevo login, caducidad,
+ * límite del demo): index.ts revoca ahí sus tokens en la intra.
+ */
+type DiscardHandler = (session: Session) => Promise<void> | void
+let discardHandler: DiscardHandler = () => {}
+
+export function onSessionDiscarded(handler: DiscardHandler): void {
+  discardHandler = handler
+  // Las sesiones caducadas que traía el fichero se descartan ya, con el handler puesto.
+  sweepExpired()
+}
+
+/** Quita una sesión del almacén y avisa al handler. Nunca falla. */
+function discard(id: string, session: Session): Promise<void> {
+  sessions.delete(id)
+  persist()
+  return Promise.resolve()
+    .then(() => discardHandler(session))
+    .catch((err: unknown) => console.warn('[sessions] fallo al descartar una sesión:', asHttpError(err).message))
+}
+
 function sweepExpired(): void {
   const now = Date.now()
-  let removed = 0
   for (const [id, s] of sessions) {
-    if (s.expiresAt <= now) {
-      sessions.delete(id)
-      removed++
-    }
+    if (s.expiresAt <= now) void discard(id, s)
   }
-  if (removed) persist()
 }
 
 setInterval(sweepExpired, SWEEP_INTERVAL_MS).unref()
@@ -111,7 +128,7 @@ function capDemoSessions(): void {
   for (const [id, s] of sessions) {
     if (demos <= MAX_DEMO_SESSIONS) break
     if (s.demo) {
-      sessions.delete(id)
+      void discard(id, s)
       demos--
     }
   }
@@ -165,8 +182,7 @@ export function getSession(id: string | null): Session | null {
   const s = sessions.get(id)
   if (!s) return null
   if (s.expiresAt < Date.now()) {
-    sessions.delete(id)
-    persist()
+    void discard(id, s)
     return null
   }
   return s
@@ -177,8 +193,14 @@ export function saveSession(): void {
   persist()
 }
 
-export function destroySession(id: string | null): void {
-  if (id && sessions.delete(id)) persist()
+/**
+ * Cierra una sesión. La promesa termina cuando sus tokens se han revocado en la
+ * intra (o se ha intentado): quien necesite confirmarlo puede esperarla.
+ */
+export function destroySession(id: string | null): Promise<void> {
+  const session = id ? sessions.get(id) : undefined
+  if (!id || !session) return Promise.resolve()
+  return discard(id, session)
 }
 
 /** Middleware: carga req.session y req.sessionId a partir de la cookie. */

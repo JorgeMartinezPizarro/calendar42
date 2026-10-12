@@ -5,7 +5,7 @@ dist
 .env
 .env.*
 !.env.example
-server/.sessions.json
+server/.sessions.json*
 .git
 .gitignore
 .gitattributes

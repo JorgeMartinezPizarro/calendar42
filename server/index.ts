@@ -27,6 +27,7 @@ import {
   isNotAuthorized,
   mergeAgenda,
   refreshTokens,
+  revokeToken,
   subscribeToEvent,
   unsubscribeFromEvent,
   type CampusAgenda,
@@ -57,6 +58,7 @@ import {
   createSession,
   destroySession,
   flushSessions,
+  onSessionDiscarded,
   requireSession,
   saveSession,
   sessionMiddleware,
@@ -184,8 +186,22 @@ function demoStateOf(session: Session): DemoState {
   return session.demoState
 }
 
+// Una sesión que se descarta (salir, nuevo login, caducidad) deja de valer
+// también en la intra: se revocan sus tokens. Así una copia vieja del almacén
+// de sesiones, o un token que se haya filtrado, no sirve para nada.
+onSessionDiscarded(async (session) => {
+  if (!session.tokens || !hasAppCredentials()) return
+  const { accessToken, refreshToken } = session.tokens
+  try {
+    if (refreshToken) await revokeToken(refreshToken)
+    await revokeToken(accessToken)
+  } catch (err) {
+    console.warn(`[sessions] no se pudieron revocar los tokens de ${session.user.login}:`, asHttpError(err).message)
+  }
+})
+
 function sessionExpired(req: Request, res: Response): void {
-  destroySession(req.sessionId)
+  void destroySession(req.sessionId)
   clearCookie(res, SESSION_COOKIE)
   res.status(401).json({ error: msg(req).sessionExpired })
 }
@@ -312,7 +328,7 @@ app.get('/api/auth/callback', async (req, res) => {
   try {
     const tokens = await exchangeCode(code)
     const user = await fetchMe(tokens.accessToken)
-    destroySession(req.sessionId)
+    await destroySession(req.sessionId)
     const id = createSession({ user, tokens, demo: false }, SESSION_TTL_MS)
     setCookie(res, SESSION_COOKIE, id, { maxAgeMs: SESSION_TTL_MS })
     res.redirect(`${APP_URL}/`)
@@ -325,8 +341,8 @@ app.get('/api/auth/callback', async (req, res) => {
 // Modo demo: siempre disponible, también con credenciales, para poder enseñar
 // la aplicación aunque la intra esté caída o rechace las peticiones. Cada
 // entrada empieza con un estado limpio, propio de la sesión.
-app.post('/api/auth/demo', (req, res) => {
-  destroySession(req.sessionId)
+app.post('/api/auth/demo', async (req, res) => {
+  await destroySession(req.sessionId)
   const user: SessionUser = {
     id: 0,
     login: 'demo',
@@ -342,8 +358,9 @@ app.post('/api/auth/demo', (req, res) => {
   res.json({ user, demo: true })
 })
 
-app.post('/api/auth/logout', (req, res) => {
-  destroySession(req.sessionId)
+// Responde cuando los tokens ya están revocados en la intra.
+app.post('/api/auth/logout', async (req, res) => {
+  await destroySession(req.sessionId)
   clearCookie(res, SESSION_COOKIE)
   res.json({ ok: true })
 })

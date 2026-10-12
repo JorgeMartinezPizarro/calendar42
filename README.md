@@ -70,6 +70,7 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 | `GET /v2/projects/:id/slots` | Slots libres de otros estudiantes para corregir un proyecto | usuario |
 | `GET /v2/projects/:id/scales` | Escala de evaluación del proyecto, necesaria para reservar | usuario |
 | `POST /v2/scale_teams` | Reservar una corrección (puede estar reservado al personal) | usuario |
+| `POST /oauth/revoke` | Revocar los tokens de una sesión al salir, al entrar de nuevo o al caducar | app |
 
 ## Puesta en marcha
 
