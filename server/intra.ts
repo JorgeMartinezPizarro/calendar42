@@ -195,14 +195,33 @@ export async function revokeToken(token: string, hint: 'access_token' | 'refresh
   }
 }
 
-/** Motivo de un error OAuth ("unauthorized_client: ..."), sin el resto del cuerpo. */
+/**
+ * Motivo de un error OAuth ("unauthorized_client: ..."). Si la respuesta no es
+ * un error OAuth (p. ej. una página HTML de un cortafuegos), su tipo y un trozo
+ * del texto, sin etiquetas: es lo que ayuda a saber quién la ha rechazado.
+ */
 async function oauthErrorOf(res: Response): Promise<string> {
+  const type = (res.headers.get('content-type') ?? 'sin content-type').split(';')[0]
+  let text = ''
   try {
-    const body = (await res.json()) as { error?: unknown; error_description?: unknown }
-    return [body.error, body.error_description].filter((x) => typeof x === 'string').join(': ') || 'sin motivo'
+    text = (await res.text()).trim()
   } catch {
-    return 'sin motivo'
+    // sin cuerpo legible
   }
+  try {
+    const body = JSON.parse(text) as { error?: unknown; error_description?: unknown }
+    const reason = [body.error, body.error_description].filter((x) => typeof x === 'string').join(': ')
+    if (reason) return reason
+  } catch {
+    // no es JSON
+  }
+  const snippet = text
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160)
+  return `${type}, ${snippet ? `"${snippet}"` : 'cuerpo vacío'}`
 }
 
 export function exchangeCode(code: string): Promise<Tokens> {
