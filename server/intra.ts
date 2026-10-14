@@ -81,7 +81,19 @@ interface RawSlot {
   begin_at: string
   end_at: string
   scale_team: unknown
-  user?: RawUserRef | null
+  /** En los slots de un proyecto, la intra oculta al corrector: llega "invisible". */
+  user?: RawUserRef | string | null
+}
+
+interface RawProjectSession {
+  campus_id?: number | null
+  cursus_id?: number | null
+  scales?: { id: number; is_primary?: boolean }[]
+}
+
+interface RawProject {
+  name?: string
+  project_sessions?: RawProjectSession[]
 }
 
 interface RawScaleTeam {
@@ -615,6 +627,11 @@ interface MergedBlock {
   user: RawUserRef | null
 }
 
+/** Dueño de un slot, o null si la intra lo oculta ("invisible") o no viene. */
+function slotOwner(s: RawSlot): RawUserRef | null {
+  return s.user && typeof s.user === 'object' ? s.user : null
+}
+
 /** Fusiona bloques de 15 min contiguos (ya ordenados) de una misma persona. */
 function mergeBlocks(slots: RawSlot[]): MergedBlock[] {
   const merged: MergedBlock[] = []
@@ -624,7 +641,7 @@ function mergeBlocks(slots: RawSlot[]): MergedBlock[] {
       last.end_at = s.end_at
       last.ids.push(s.id)
     } else {
-      merged.push({ begin_at: s.begin_at, end_at: s.end_at, ids: [s.id], user: s.user ?? null })
+      merged.push({ begin_at: s.begin_at, end_at: s.end_at, ids: [s.id], user: slotOwner(s) })
     }
   }
   return merged
@@ -933,24 +950,33 @@ export async function deleteSlots(accessToken: string, ids: number[]): Promise<v
  */
 export function normalizeFreeSlots(
   rawSlots: RawSlot[],
-  { excludeUserId = null }: { excludeUserId?: number | null } = {},
+  { excludeUserId = null, evaluationMinutes = null }: { excludeUserId?: number | null; evaluationMinutes?: number | null } = {},
 ): AgendaItem[] {
   const free = rawSlots
     .filter((s) => s.scale_team == null)
     // Los slots propios no sirven para que a uno le corrijan.
-    .filter((s) => excludeUserId == null || s.user?.id !== excludeUserId)
+    .filter((s) => excludeUserId == null || slotOwner(s)?.id !== excludeUserId)
     .sort((a, b) => a.begin_at.localeCompare(b.begin_at))
 
+  // Con el corrector oculto, todos los bloques van juntos: los contiguos forman
+  // una franja aunque sean de personas distintas (la intra asigna al reservar).
   const byUser = new Map<number | 'anon', RawSlot[]>()
   for (const s of free) {
-    const key = s.user?.id ?? 'anon'
+    const key = slotOwner(s)?.id ?? 'anon'
     const list = byUser.get(key) ?? []
     list.push(s)
     byUser.set(key, list)
   }
 
+  // La intra devuelve toda la disponibilidad, también huecos donde la
+  // corrección no cabe (p. ej. un bloque suelto de 15 min para una de 45):
+  // solo se ofrecen las franjas de al menos la duración de la evaluación.
+  const minMs = (evaluationMinutes ?? 0) * 60_000
+  const fits = (b: MergedBlock) => new Date(b.end_at).getTime() - new Date(b.begin_at).getTime() >= minMs
+
   return [...byUser.values()]
     .flatMap(mergeBlocks)
+    .filter(fits)
     .sort((a, b) => a.begin_at.localeCompare(b.begin_at))
     .map((b) => ({
       id: `free-${b.ids[0]}`,
@@ -963,16 +989,103 @@ export function normalizeFreeSlots(
       endAt: b.end_at,
       slotIds: b.ids,
       corrector: b.user ? { id: b.user.id, login: b.user.login ?? null } : null,
+      ...(evaluationMinutes ? { evaluationMinutes } : {}),
     }))
 }
 
-/** Slots libres para corregir un proyecto en [from, to). Requiere scope `projects`. */
+/** Evaluación de un proyecto en un campus: su escala principal y cuánto dura. */
+export interface EvaluationInfo {
+  scaleId: number | null
+  /** Minutos que dura la corrección; null si la intra no deja saberlo. */
+  minutes: number | null
+}
+
+/**
+ * Escala principal del proyecto para el campus y el cursus del usuario. La
+ * intra la da en las sesiones del proyecto (una por campus); /projects/:id/scales
+ * y /scales/:id no se dejan leer con el token de un estudiante ni con el de la app.
+ */
+export function pickScale(
+  project: RawProject,
+  { campusId, cursusId }: { campusId: number | null; cursusId: number | null },
+): number | null {
+  const score = (s: RawProjectSession) =>
+    (s.campus_id === campusId ? 4 : s.campus_id == null ? 2 : 0) + (cursusId != null && s.cursus_id === cursusId ? 1 : 0)
+  const session = (project.project_sessions ?? [])
+    .filter((s) => s.scales?.length && (s.campus_id === campusId || s.campus_id == null))
+    .sort((a, b) => score(b) - score(a))[0]
+  const scales = session?.scales ?? []
+  return (scales.find((s) => s.is_primary) ?? scales[0])?.id ?? null
+}
+
+const EVALUATION_TTL_MS = 12 * 60 * 60_000
+const evaluations = new Map<string, { value: EvaluationInfo; expires: number }>()
+
+/**
+ * Escala y duración de la evaluación de un proyecto (en caché unas horas). La
+ * duración sale de una corrección del proyecto con esa escala: su `scale`
+ * trae `duration`, que no se puede leer de otra forma.
+ */
+export async function fetchEvaluationInfo(
+  accessToken: string,
+  { projectId, campusId, cursusId }: { projectId: number; campusId: number | null; cursusId: number | null },
+): Promise<EvaluationInfo> {
+  const key = `${projectId}:${campusId}:${cursusId}`
+  const known = evaluations.get(key)
+  if (known && known.expires > Date.now()) return known.value
+
+  const project = await intraGet<RawProject>(accessToken, `/projects/${projectId}`)
+  if (project.name) projectNames.set(projectId, project.name)
+  const scaleId = pickScale(project, { campusId, cursusId })
+
+  type Team = { scale?: { id?: number; duration?: number } | null }
+  const durationOf = (teams: Team[] | unknown) =>
+    (Array.isArray(teams) ? (teams as Team[]) : []).find((t) => t.scale?.duration)?.scale?.duration ?? null
+  let seconds: number | null = null
+  try {
+    // Una corrección de esa escala; si el filtro no existe o no hay ninguna, cualquiera del proyecto.
+    if (scaleId != null) {
+      seconds = durationOf(
+        await intraGet<Team[]>(accessToken, `/projects/${projectId}/scale_teams`, { 'filter[scale_id]': scaleId, 'page[size]': 1 }),
+      )
+    }
+  } catch {
+    // filtro no admitido: se prueba sin él
+  }
+  try {
+    seconds ??= durationOf(await intraGet<Team[]>(accessToken, `/projects/${projectId}/scale_teams`, { 'page[size]': 1 }))
+  } catch {
+    // sin duración: se ofrecen las franjas sin filtrar por ella
+  }
+
+  const value: EvaluationInfo = { scaleId, minutes: seconds ? Math.round(seconds / 60) : null }
+  evaluations.set(key, { value, expires: Date.now() + EVALUATION_TTL_MS })
+  return value
+}
+
+/**
+ * Franjas libres para corregir un proyecto en [from, to), solo las que tienen
+ * sitio para la evaluación entera. Requiere scope `projects`.
+ */
 export async function fetchProjectSlots(
   accessToken: string,
-  { projectId, userId = null, from, to }: Range & { projectId: number; userId?: number | null },
-): Promise<AgendaItem[]> {
-  const raw = await fetchAllInRange<RawSlot>(accessToken, `/projects/${projectId}/slots`, { from, to })
-  return normalizeFreeSlots(raw, { excludeUserId: userId })
+  {
+    projectId,
+    userId = null,
+    campusId = null,
+    cursusId = null,
+    from,
+    to,
+  }: Range & { projectId: number; userId?: number | null; campusId?: number | null; cursusId?: number | null },
+): Promise<{ items: AgendaItem[]; evaluationMinutes: number | null }> {
+  const [raw, evaluation] = await Promise.all([
+    fetchAllInRange<RawSlot>(accessToken, `/projects/${projectId}/slots`, { from, to }),
+    fetchEvaluationInfo(accessToken, { projectId, campusId, cursusId }),
+  ])
+  return {
+    items: normalizeFreeSlots(raw, { excludeUserId: userId, evaluationMinutes: evaluation.minutes }),
+    evaluationMinutes: evaluation.minutes,
+  }
 }
 
 /**
@@ -988,15 +1101,22 @@ export async function bookCorrection(
     teamId,
     beginAt,
     correctorId,
-  }: { projectId: number; teamId: number; beginAt: string; correctorId: number | null },
+    campusId = null,
+    cursusId = null,
+  }: {
+    projectId: number
+    teamId: number
+    beginAt: string
+    correctorId: number | null
+    campusId?: number | null
+    cursusId?: number | null
+  },
 ): Promise<unknown> {
-  const scales = await intraGet<{ id: number; is_primary?: boolean }[]>(accessToken, `/projects/${projectId}/scales`)
-  const list = Array.isArray(scales) ? scales : []
-  const scale = list.find((s) => s.is_primary) ?? list[0]
-  if (!scale) {
+  const { scaleId } = await fetchEvaluationInfo(accessToken, { projectId, campusId, cursusId })
+  if (scaleId == null) {
     throw httpError('El proyecto no tiene escala de evaluación en la intra', { status: 404, code: { key: 'noScale' } })
   }
-  const scaleTeam: Record<string, string | number> = { begin_at: beginAt, team_id: teamId, scale_id: scale.id }
+  const scaleTeam: Record<string, string | number> = { begin_at: beginAt, team_id: teamId, scale_id: scaleId }
   if (correctorId) scaleTeam.user_id = correctorId
   return intraRequest(accessToken, '/scale_teams', { method: 'POST', body: { scale_team: scaleTeam } })
 }

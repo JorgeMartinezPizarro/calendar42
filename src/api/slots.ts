@@ -19,20 +19,21 @@ export async function deleteSlots(ids: number[]): Promise<void> {
 
 /**
  * Franjas libres de otros estudiantes para corregir un proyecto, con inicio
- * en [from, to). Elementos de tipo 'free' con fechas ya convertidas.
+ * en [from, to): solo las que tienen sitio para la corrección entera, y lo que
+ * dura (null si la intra no deja saberlo). Elementos 'free' con fechas como Date.
  */
 export async function fetchProjectSlots(
   projectId: number,
   from: Date,
   to: Date,
   { signal }: { signal?: AbortSignal } = {},
-): Promise<Item[]> {
+): Promise<{ items: Item[]; evaluationMinutes: number | null }> {
   const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() })
-  const body = await request<{ items?: AgendaItem[] }>(`/api/projects/${projectId}/slots?${params}`, {
-    signal,
-    fallback: t.api.freeSlots,
-  })
-  return (body.items ?? []).map(toItem)
+  const body = await request<{ items?: AgendaItem[]; evaluationMinutes?: number | null }>(
+    `/api/projects/${projectId}/slots?${params}`,
+    { signal, fallback: t.api.freeSlots },
+  )
+  return { items: (body.items ?? []).map(toItem), evaluationMinutes: body.evaluationMinutes ?? null }
 }
 
 export interface Booking {

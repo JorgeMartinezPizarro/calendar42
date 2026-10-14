@@ -41,6 +41,7 @@ import {
   mockDeleteSlots,
   mockOverlaps,
   mockProjectSlots,
+  MOCK_EVALUATION_MINUTES,
   mockProjects,
   mockSetExamSubscription,
   mockSetSubscription,
@@ -652,7 +653,7 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
   }
   const session = sessionOf(req)
   if (session.demo) {
-    res.json({ items: mockProjectSlots({ projectId, from, to }) })
+    res.json({ items: mockProjectSlots({ projectId, from, to }), evaluationMinutes: MOCK_EVALUATION_MINUTES })
     return
   }
 
@@ -660,9 +661,16 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
     const token = await validAccessToken(session)
     const key = `pslots:${session.user.id}:${projectId}:${from.toISOString()}:${to.toISOString()}`
     const { value } = await cache.cached(key, { ttlMs: TTL_MS.freeSlots }, () =>
-      fetchProjectSlots(token, { projectId, userId: session.user.id, from, to }),
+      fetchProjectSlots(token, {
+        projectId,
+        userId: session.user.id,
+        campusId: session.user.campusId,
+        cursusId: session.user.cursusId ?? null,
+        from,
+        to,
+      }),
     )
-    res.json({ items: value })
+    res.json(value)
   } catch (err) {
     sendIntraFailure(req, res, err, `slots libres ${projectId}`, {
       hint: msg(req).hintProjectSlots,
@@ -697,6 +705,8 @@ app.post('/api/corrections', requireSession, async (req, res) => {
         teamId,
         beginAt: begin.toISOString(),
         correctorId,
+        campusId: session.user.campusId,
+        cursusId: session.user.cursusId ?? null,
       })
     }
     forgetPersonal(session.user.id)

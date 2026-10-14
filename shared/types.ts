@@ -60,8 +60,10 @@ export interface AgendaItem<D = string> {
   // ---- slots propios y franjas libres ----
   /** Ids de los bloques de 15 min de la intra que forman la franja. */
   slotIds?: number[]
-  /** Dueño de una franja libre: quien corregiría. */
+  /** Dueño de una franja libre: quien corregiría (null si la intra lo oculta). */
   corrector?: { id: number; login: string | null } | null
+  /** Franjas libres: lo que dura la corrección del proyecto, en minutos. */
+  evaluationMinutes?: number
 
   // ---- correcciones ----
   role?: 'corrector' | 'corrected'

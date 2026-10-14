@@ -38,6 +38,9 @@ export interface Loadable<T> {
   error: string | null
 }
 
+/** Franjas libres de un proyecto y lo que dura su corrección (null si no se sabe). */
+export type FreeSlots = Loadable<Item> & { evaluationMinutes: number | null }
+
 /** Envío en curso a la intra para un elemento (apuntarse, reservar...). */
 export interface ActionState {
   busy: boolean

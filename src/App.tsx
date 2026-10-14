@@ -28,7 +28,7 @@ import {
   slotDeleteState,
   subscriptionState,
 } from './subscription.ts'
-import type { ActionState, AgendaWarning, Item, ItemType, Loadable, Project, TimeRange } from './types.ts'
+import type { ActionState, AgendaWarning, FreeSlots, Item, ItemType, Loadable, Project, TimeRange } from './types.ts'
 import { addDays, addMonths, getMonthGridRange, startOfDay, toDateKey } from './utils/date.ts'
 import './App.css'
 
@@ -37,7 +37,7 @@ type AuthState = { status: 'checking' } | { status: 'ready'; me: Me; error?: str
 const EMPTY: never[] = []
 const NO_PROJECTS: Loadable<Project> = { status: 'idle', items: EMPTY, error: null }
 const NO_UPCOMING: Loadable<Item> = { status: 'idle', items: EMPTY, error: null }
-const LOADING: Loadable<Item> = { status: 'loading', items: EMPTY, error: null }
+const LOADING: FreeSlots = { status: 'loading', items: EMPTY, error: null, evaluationMinutes: null }
 const IDLE_ACTION: SlotAction = { busy: false, error: null, created: null }
 // Tiempo que se ve el aviso "Slot creado" antes de irse solo.
 const SLOT_CREATED_NOTICE_MS = 5000
@@ -309,7 +309,7 @@ function App() {
 
   // Slots libres de otros estudiantes para el proyecto cerrado elegido, por
   // proyecto y mes visible: { 'projectId:YYYY-M': { status, items, error } }.
-  const [freeSlotsByKey, setFreeSlotsByKey] = useState<Record<string, Loadable<Item>>>({})
+  const [freeSlotsByKey, setFreeSlotsByKey] = useState<Record<string, FreeSlots>>({})
   const freeProjectId = mode === 'corrections' && selectedProject?.closed ? selectedProject.projectId : null
   const freeKey = freeProjectId ? `${freeProjectId}:${currentKey}` : null
 
@@ -318,15 +318,15 @@ function App() {
     const controller = new AbortController()
     const { start, end } = getMonthGridRange(viewDate.getFullYear(), viewDate.getMonth())
     fetchProjectSlots(freeProjectId, start, end, { signal: controller.signal })
-      .then((items) =>
-        setFreeSlotsByKey((prev) => ({ ...prev, [freeKey]: { status: 'idle', items, error: null } })),
+      .then(({ items, evaluationMinutes }) =>
+        setFreeSlotsByKey((prev) => ({ ...prev, [freeKey]: { status: 'idle', items, error: null, evaluationMinutes } })),
       )
       .catch((err: unknown) => {
         const message = loadFailure(err)
         if (message === null) return
         setFreeSlotsByKey((prev) => ({
           ...prev,
-          [freeKey]: { status: 'error', items: EMPTY, error: message },
+          [freeKey]: { status: 'error', items: EMPTY, error: message, evaluationMinutes: null },
         }))
         if (statusOf(err) === 403) noteMode('corrections', 'reason', message)
       })

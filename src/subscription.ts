@@ -102,12 +102,17 @@ export function subscriptionState(
   return { action, enabled: true, reason: null }
 }
 
+/** Minutos que dura la corrección de una franja libre (la de su proyecto, o la habitual). */
+export function evaluationMinutesOf(item: Item): number {
+  return item.evaluationMinutes ?? CORRECTION_MINUTES
+}
+
 /**
  * Reservar una corrección en una franja libre de otro estudiante (type 'free')
  * para el proyecto elegido en "Correcciones" (o null), empezando a `startAt`.
  * null si el elemento no es una franja libre.
- * - items: la agenda; la corrección (CORRECTION_MINUTES desde startAt) no
- *   puede pisar nada del usuario.
+ * - La corrección entera (lo que dura la del proyecto) tiene que caber en la
+ *   franja y no puede pisar nada de la agenda (`items`).
  */
 export function bookingState(
   item: Item,
@@ -122,11 +127,13 @@ export function bookingState(
   if (!project.closed) return blocked(t.rules.projectNotClosed(project.name))
   if (!project.teamId) return blocked(t.rules.noTeam)
   if (startAt <= now) return blocked(t.rules.timePassed)
+  const minutes = evaluationMinutesOf(item)
   const range = {
     id: item.id,
     beginAt: startAt,
-    endAt: new Date(startAt.getTime() + CORRECTION_MINUTES * 60_000),
+    endAt: new Date(startAt.getTime() + minutes * 60_000),
   }
+  if (range.endAt > item.endAt) return blocked(t.rules.doesNotFit(minutes))
   const conflicts = overlappingItems(range, items)
   if (conflicts.length) return blocked(overlapReason(conflicts), true)
   return { enabled: true, reason: null, overlap: false }

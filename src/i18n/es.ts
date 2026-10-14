@@ -154,6 +154,7 @@ export const es = {
     team: 'Equipo',
     evaluationDone: (mark: number | null) => `Evaluación entregada${mark != null ? ` · nota ${mark}` : ''}`,
     bookedHere: 'Reservada desde Calendar42 (demo)',
+    evaluationLasts: (minutes: number) => `La corrección de este proyecto dura ${minutes} min.`,
     examProjects: 'Proyectos',
     examCursus: 'Cursus',
     examIp: 'IP',
@@ -238,8 +239,10 @@ export const es = {
     notClosedYet: 'Hasta que cierres el proyecto no se puede agendar su corrección.',
     searchingSlots: 'Buscando slots libres…',
     noFreeSlots: 'Ningún slot libre este mes para corregir este proyecto.',
-    freeSlots: (n: number) =>
-      `${n} ${plural(n, 'franja libre', 'franjas libres')} este mes, en el calendario y en las horas del día. Pulsa una para agendar la corrección.`,
+    noFreeSlotsFor: (minutes: number) =>
+      `Ningún hueco libre este mes donde quepa la corrección de este proyecto (${minutes} min).`,
+    freeSlots: (n: number, minutes: number | null) =>
+      `${n} ${plural(n, 'franja libre', 'franjas libres')} este mes${minutes ? ` donde cabe la corrección (${minutes} min)` : ''}, en el calendario y en las horas del día. Pulsa una para agendar la corrección.`,
     none: 'Ningún proyecto en curso en tu cursus',
     pickLabel: 'Proyecto cerrado para agendar su corrección',
     pick: 'Elige un proyecto…',
@@ -272,6 +275,7 @@ export const es = {
     slotInPast: 'El slot debe empezar en el futuro',
     slotTooShort: (min: number) => `El slot debe durar al menos ${min} minutos`,
     slotGap: (gap: number, what: string) => `Deja ${gap} minutos libres entre slots: queda pegado a ${what}`,
+    doesNotFit: (minutes: number) => `La corrección dura ${minutes} min y no cabe empezando a esa hora`,
   },
 
   /** Mensajes si la API propia falla sin explicar por qué. */

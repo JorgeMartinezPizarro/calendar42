@@ -142,6 +142,7 @@ export const en: Messages = {
     team: 'Team',
     evaluationDone: (mark) => `Evaluation submitted${mark != null ? ` · mark ${mark}` : ''}`,
     bookedHere: 'Booked from Calendar42 (demo)',
+    evaluationLasts: (minutes) => `This project's evaluation lasts ${minutes} min.`,
     examProjects: 'Projects',
     examCursus: 'Cursus',
     examIp: 'IP',
@@ -226,8 +227,9 @@ export const en: Messages = {
     notClosedYet: 'Its evaluation can be booked once you close the project.',
     searchingSlots: 'Looking for free slots…',
     noFreeSlots: 'No free slots this month to evaluate this project.',
-    freeSlots: (n) =>
-      `${n} free ${plural(n, 'slot', 'slots')} this month, in the calendar and in the day hours. Tap one to book the evaluation.`,
+    noFreeSlotsFor: (minutes) => `No free time this month long enough for this project's evaluation (${minutes} min).`,
+    freeSlots: (n, minutes) =>
+      `${n} free ${plural(n, 'slot', 'slots')} this month${minutes ? ` long enough for the evaluation (${minutes} min)` : ''}, in the calendar and in the day hours. Tap one to book the evaluation.`,
     none: 'No projects in progress in your cursus',
     pickLabel: 'Closed project to book its evaluation',
     pick: 'Pick a project…',
@@ -257,6 +259,7 @@ export const en: Messages = {
     slotInPast: 'The slot must start in the future',
     slotTooShort: (min) => `The slot must last at least ${min} minutes`,
     slotGap: (gap, what) => `Leave ${gap} free minutes between slots: it touches ${what}`,
+    doesNotFit: (minutes) => `The evaluation lasts ${minutes} min and does not fit starting at that time`,
   },
 
   api: {

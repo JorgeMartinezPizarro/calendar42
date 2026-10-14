@@ -180,6 +180,9 @@ interface Range {
   to: Date
 }
 
+/** Duración de las correcciones en el demo. */
+export const MOCK_EVALUATION_MINUTES = 30
+
 /** Franjas libres de otros estudiantes para corregir un proyecto. */
 export function mockProjectSlots({ projectId, from, to }: Range & { projectId: number }): AgendaItem[] {
   const items: AgendaItem[] = []
@@ -202,6 +205,7 @@ export function mockProjectSlots({ projectId, from, to }: Range & { projectId: n
       endAt: new Date(begin.getTime() + hours * 3_600_000).toISOString(),
       slotIds: Array.from({ length: chunks }, (_, k) => key * 10 + k),
       corrector: { id: 100 + (login.charCodeAt(0) % 10), login },
+      evaluationMinutes: MOCK_EVALUATION_MINUTES,
     })
   }
   while (cursor < to) {

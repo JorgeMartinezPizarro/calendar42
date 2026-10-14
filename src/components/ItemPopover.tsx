@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { itemColor } from '../agendaTypes.ts'
 import { t } from '../i18n/index.ts'
 import { itemDescription, itemName } from '../itemText.ts'
-import { MIN_SLOT_MINUTES, type BookingState, type ButtonState, type SubscriptionState } from '../subscription.ts'
+import { evaluationMinutesOf, type BookingState, type ButtonState, type SubscriptionState } from '../subscription.ts'
 import type { ActionState, Item, Project } from '../types.ts'
 import { formatRange, formatTime } from '../utils/date.ts'
 import Markdown from './Markdown.tsx'
@@ -23,12 +23,12 @@ function capacity(item: Item): string | null {
 
 /**
  * Horas de inicio posibles para una corrección dentro de una franja libre:
- * cada 15 min, dejando al menos la duración mínima hasta el final.
+ * cada 15 min, dejando hasta el final lo que dura la corrección del proyecto.
  */
 function startOptions(item: Item): Date[] {
   const step = 15 * 60_000
   const begin = item.beginAt.getTime()
-  const last = Math.max(begin, item.endAt.getTime() - MIN_SLOT_MINUTES * 60_000)
+  const last = Math.max(begin, item.endAt.getTime() - evaluationMinutesOf(item) * 60_000)
   const options: Date[] = []
   for (let t = begin; t <= last; t += step) options.push(new Date(t))
   return options

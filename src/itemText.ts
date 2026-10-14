@@ -25,8 +25,10 @@ export function itemDescription(item: Item): string {
   switch (item.type) {
     case 'slot':
       return blocks ? t.items.slotDescription(blocks) : item.description
-    case 'free':
-      return blocks ? t.items.freeDescription(blocks) : item.description
+    case 'free': {
+      const text = blocks ? t.items.freeDescription(blocks) : item.description
+      return item.evaluationMinutes ? `${text}\n${t.items.evaluationLasts(item.evaluationMinutes)}` : text
+    }
     case 'correction': {
       const info = item.correctionInfo
       if (!info) return item.description

@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { t } from '../i18n/index.ts'
-import type { Item, Loadable, Project } from '../types.ts'
+import type { FreeSlots, Loadable, Project } from '../types.ts'
 import './ProjectPicker.css'
 
 // Grupos del desplegable, en este orden. Solo el primero es seleccionable.
@@ -15,12 +15,13 @@ function describe(p: Project): string {
   return `${status}. ${t.projects.notClosedYet}`
 }
 
-function describeFreeSlots(freeSlots: Loadable<Item>): string {
+function describeFreeSlots(freeSlots: FreeSlots): string {
   if (freeSlots.status === 'loading') return t.projects.searchingSlots
   if (freeSlots.error) return freeSlots.error
   const n = freeSlots.items.length
-  if (n === 0) return t.projects.noFreeSlots
-  return t.projects.freeSlots(n)
+  const minutes = freeSlots.evaluationMinutes
+  if (n === 0) return minutes ? t.projects.noFreeSlotsFor(minutes) : t.projects.noFreeSlots
+  return t.projects.freeSlots(n, minutes)
 }
 
 interface ProjectPickerProps {
@@ -33,7 +34,7 @@ interface ProjectPickerProps {
   selectedId?: number | null
   onSelect: (id: number | null) => void
   /** Slots libres del elegido, o null. */
-  freeSlots?: Loadable<Item> | null
+  freeSlots?: FreeSlots | null
 }
 
 /**
