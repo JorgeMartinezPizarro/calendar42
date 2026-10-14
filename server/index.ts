@@ -369,6 +369,61 @@ app.post('/api/auth/logout', async (req, res) => {
   res.json({ ok: true })
 })
 
+// Fotos de usuario: el CDN de la intra solo las sirve con el token del usuario
+// (sin él responde 403), así que el navegador no puede pedirlas directamente.
+// Se piden aquí con el token de la sesión y se guardan un rato en memoria.
+const AVATAR_TTL_MS = 6 * 60 * 60_000
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024
+const AVATAR_MAX_ENTRIES = 300
+const avatars = new Map<number, { url: string; type: string; body: Buffer; expires: number }>()
+
+/** La foto del usuario de la sesión. Solo su propia URL, y solo del CDN de la intra. */
+app.get('/api/auth/avatar', requireSession, async (req, res) => {
+  const session = sessionOf(req)
+  const url = session.user.image
+  let host = ''
+  try {
+    host = url ? new URL(url).host : ''
+  } catch {
+    // URL inválida
+  }
+  if (session.demo || !url || !url.startsWith('https://') || host !== 'cdn.intra.42.fr') {
+    res.status(404).end()
+    return
+  }
+
+  const now = Date.now()
+  let entry = avatars.get(session.user.id)
+  if (!entry || entry.url !== url || entry.expires <= now) {
+    try {
+      const token = await validAccessToken(session)
+      const cdn = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      const type = (cdn.headers.get('content-type') ?? '').split(';')[0]
+      const body = Buffer.from(await cdn.arrayBuffer())
+      if (!cdn.ok || !type.startsWith('image/') || body.length > AVATAR_MAX_BYTES) {
+        console.warn(`[avatar] ${session.user.login}: el CDN respondió ${cdn.status} (${type || 'sin tipo'}, ${body.length} bytes)`)
+        res.status(404).end()
+        return
+      }
+      entry = { url, type, body, expires: now + AVATAR_TTL_MS }
+      avatars.delete(session.user.id)
+      avatars.set(session.user.id, entry)
+      // Se descartan las más antiguas por encima del límite (el Map guarda el orden de alta).
+      for (const key of avatars.keys()) {
+        if (avatars.size <= AVATAR_MAX_ENTRIES) break
+        avatars.delete(key)
+      }
+    } catch (err) {
+      const e = asHttpError(err)
+      if (e.status === 401) return sessionExpired(req, res)
+      console.warn(`[avatar] ${session.user.login}:`, e.message)
+      res.status(404).end()
+      return
+    }
+  }
+  res.set({ 'Content-Type': entry.type, 'Cache-Control': 'private, max-age=3600' }).send(entry.body)
+})
+
 // ---------------------------------------------------------------------------
 // Agenda
 // ---------------------------------------------------------------------------

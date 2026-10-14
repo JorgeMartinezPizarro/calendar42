@@ -50,7 +50,9 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 
 | Recurso | Para qué | Token |
 |---|---|---|
+| `GET /oauth/authorize`, `POST /oauth/token` | Login con la intra, renovación del token del usuario y token de la app | app |
 | `GET /v2/me` | Usuario y campus principal tras el login | usuario |
+| `GET cdn.intra.42.fr/users/…` | Foto del usuario: el CDN solo la sirve con su token, así que la pide el servidor (`/api/auth/avatar`) | usuario |
 | `GET /v2/users/:id/coalitions` | Coaliciones a las que ha pertenecido el usuario (piscina, discovery, cursus...) | usuario |
 | `GET /v2/blocs` | Coaliciones del cursus actual en el campus, para mostrar esa y no la de la piscina | usuario |
 | `GET /v2/campus/:id/events` | Eventos del campus | usuario |

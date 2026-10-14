@@ -8,6 +8,7 @@ import LoginView from './components/LoginView.tsx'
 import ModeBar, { type Mode, type ModeNote, type ModeNotes } from './components/ModeBar.tsx'
 import ProjectPicker from './components/ProjectPicker.tsx'
 import SlotCreator, { type SlotAction, type SlotEdge } from './components/SlotCreator.tsx'
+import UserAvatar from './components/UserAvatar.tsx'
 import { clearSnapshots, loadSnapshot, saveSnapshot, type MonthAgenda } from './agendaCache.ts'
 import { isMine } from './agendaTypes.ts'
 import { fetchMe, logout, type LoggedIn, type Me } from './api/auth.ts'
@@ -757,7 +758,7 @@ function App() {
               </span>
             </span>
           )}
-          {user.image && <img className="app__avatar" src={user.image} alt="" width="28" height="28" />}
+          <UserAvatar image={user.image} login={user.login} />
           <span className="app__login">{user.login}</span>
           <LanguageToggle />
           <button type="button" className="app__logout" onClick={handleLogout}>

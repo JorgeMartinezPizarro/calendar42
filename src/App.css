@@ -200,6 +200,20 @@
   object-fit: cover;
 }
 
+/* Sin foto (o si no carga): la inicial del login, del tamaño de la foto. */
+.app__avatar--initial {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  font-weight: 700;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: #fff;
+  background: var(--coalition, #4f8cff);
+}
+
 .app__logout {
   font: inherit;
   font-size: 0.85rem;
