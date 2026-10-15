@@ -30,7 +30,7 @@ export const es = {
   app: {
     tagline: (campus: string | null) =>
       campus ? `Calendario para estudiantes de 42 ${campus}` : 'Calendario para estudiantes de 42',
-    demoBadge: 'Modo demo',
+    demoBadge: 'Demo',
     demoBadgeTitle: 'Datos de ejemplo, sin tocar la intra',
     agendaError: (message: string) => `No se pudo cargar la agenda: ${message}`,
     intraNoResponse: (n: number) => `La intra no respondió para ${n} ${plural(n, 'fuente', 'fuentes')}`,
@@ -60,8 +60,6 @@ export const es = {
   },
 
   export: {
-    button: 'Exportar',
-    busy: 'Exportando…',
     title: 'Descarga tu agenda en .ics para importarla en Google Calendar, Outlook o Apple Calendar',
     ariaLabel: 'Exportar la agenda en formato iCalendar (.ics)',
     nothing: 'Nada que exportar: no tienes nada en la agenda desde hoy.',
@@ -78,6 +76,7 @@ export const es = {
     prevMonth: 'Mes anterior',
     nextMonth: 'Mes siguiente',
     today: 'Hoy',
+    refresh: 'Actualizar la agenda desde la intra',
   },
 
   /** Tipos en plural: marcas del calendario y leyendas. */
@@ -239,6 +238,8 @@ export const es = {
     notClosedYet: 'Hasta que cierres el proyecto no se puede agendar su corrección.',
     searchingSlots: 'Buscando slots libres…',
     refresh: 'Volver a buscar slots libres',
+    slotsDisabled:
+      'Búsqueda de slots desactivada: la API de 42 no da los slots libres reales de un proyecto (devuelve una muestra al azar). Agenda la corrección desde la intra.',
     noFreeSlots: 'Ningún slot libre este mes para corregir este proyecto.',
     noFreeSlotsFor: (minutes: number) =>
       `Ningún hueco libre este mes donde quepa la corrección de este proyecto (${minutes} min).`,
@@ -288,6 +289,7 @@ export const es = {
     deleteSlot: 'No se pudo borrar el slot',
     freeSlots: 'No se pudieron cargar los slots libres',
     book: 'No se pudo reservar la corrección',
+    refresh: 'No se pudo actualizar la agenda',
     generic: 'Error',
   },
 }

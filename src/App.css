@@ -147,7 +147,11 @@
   border-radius: 999px;
 }
 
+/* Etiqueta "Demo": pequeña, para que la cabecera quepa en una línea en móvil. */
 .app__notice {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  letter-spacing: 0.02em;
   background: rgba(255, 159, 67, 0.2);
   color: #ff9f43;
 }
@@ -200,8 +204,10 @@
   object-fit: cover;
 }
 
-/* Sin foto (o si no carga): la inicial del login, del tamaño de la foto. */
+/* Sin foto (silueta) o si no carga (inicial del login), del tamaño de la foto. */
 .app__avatar--initial {
+  box-sizing: border-box;
+  overflow: hidden;
   width: 28px;
   height: 28px;
   display: inline-grid;
@@ -214,19 +220,35 @@
   background: var(--coalition, #4f8cff);
 }
 
+.app__avatar-figure {
+  margin-top: 7px;
+  opacity: 0.95;
+}
+
+/* GitHub y Salir: iconos redondos del tamaño de la foto del usuario. */
+.app__source,
 .app__logout {
-  font: inherit;
-  font-size: 0.85rem;
-  color: inherit;
-  background: transparent;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
   border: 1px solid rgba(128, 128, 128, 0.35);
-  border-radius: 8px;
-  padding: 0.25rem 0.6rem;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 0.85;
   cursor: pointer;
 }
 
-.app__logout:hover {
+.app__source:hover,
+.app__source:focus-visible,
+.app__logout:hover,
+.app__logout:focus-visible {
   border-color: #4f8cff;
+  opacity: 1;
 }
 
 .app__splash {
@@ -321,10 +343,6 @@
   .coalition__emblem {
     width: 26px;
     height: 26px;
-  }
-
-  .app__notice {
-    font-size: 0.65rem;
   }
 
   /* Avisos y errores, en su propia línea bajo la cabecera. */

@@ -10,6 +10,14 @@ export interface Agenda {
   warnings: AgendaWarning[]
 }
 
+/**
+ * Pide al servidor que olvide su caché de este usuario (y la del campus), para
+ * que lo cambiado directamente en la intra aparezca en la siguiente carga.
+ */
+export async function refreshAgenda(): Promise<void> {
+  await request('/api/refresh', { method: 'POST', fallback: t.api.refresh })
+}
+
 /** Pide al backend la agenda cuyo inicio cae en [from, to), con fechas como Date. */
 export async function fetchAgenda(
   from: Date,

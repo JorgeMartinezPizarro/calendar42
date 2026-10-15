@@ -25,7 +25,7 @@ export const en: Messages = {
 
   app: {
     tagline: (campus) => (campus ? `Calendar for 42 ${campus} students` : 'Calendar for 42 students'),
-    demoBadge: 'Demo mode',
+    demoBadge: 'Demo',
     demoBadgeTitle: 'Sample data, the intra is not touched',
     agendaError: (message) => `Could not load the agenda: ${message}`,
     intraNoResponse: (n) => `The intra did not respond for ${n} ${plural(n, 'source', 'sources')}`,
@@ -54,8 +54,6 @@ export const en: Messages = {
   },
 
   export: {
-    button: 'Export',
-    busy: 'Exporting…',
     title: 'Download your agenda as .ics to import it into Google Calendar, Outlook or Apple Calendar',
     ariaLabel: 'Export the agenda in iCalendar format (.ics)',
     nothing: 'Nothing to export: your agenda is empty from today on.',
@@ -72,6 +70,7 @@ export const en: Messages = {
     prevMonth: 'Previous month',
     nextMonth: 'Next month',
     today: 'Today',
+    refresh: 'Refresh the agenda from the intra',
   },
 
   types: {
@@ -227,6 +226,8 @@ export const en: Messages = {
     notClosedYet: 'Its evaluation can be booked once you close the project.',
     searchingSlots: 'Looking for free slots…',
     refresh: 'Search free slots again',
+    slotsDisabled:
+      "Slot search disabled: the 42 API does not return a project's real free slots (it returns a random sample). Book the evaluation on the intra.",
     noFreeSlots: 'No free slots this month to evaluate this project.',
     noFreeSlotsFor: (minutes) => `No free time this month long enough for this project's evaluation (${minutes} min).`,
     freeSlots: (n, minutes) =>
@@ -271,6 +272,7 @@ export const en: Messages = {
     deleteSlot: 'Could not delete the slot',
     freeSlots: 'Could not load the free slots',
     book: 'Could not book the evaluation',
+    refresh: 'Could not refresh the agenda',
     generic: 'Error',
   },
 }

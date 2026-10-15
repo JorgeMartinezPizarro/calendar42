@@ -117,3 +117,8 @@
 .projects__empty--error {
   color: #ff5c5c;
 }
+
+/* Lo que la API no permite: en naranja, como los demás motivos. */
+.projects__slots--reason {
+  color: #ff9f43;
+}

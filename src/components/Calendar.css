@@ -1,4 +1,6 @@
 .calendar {
+  /* El ancho del propio calendario decide si la cabecera cabe en una línea. */
+  container: calendar / inline-size;
   --cal-border: rgba(128, 128, 128, 0.25);
   --cal-muted: rgba(128, 128, 128, 0.7);
   --cal-accent: #4f8cff;
@@ -12,16 +14,29 @@
 .calendar__header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   margin-bottom: 1rem;
+}
+
+/* Botones de la derecha: Hoy, actualizar, exportar y GitHub. */
+.calendar__actions {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: inherit;
 }
 
 .calendar__title {
   flex: 1;
+  min-width: 0;
   margin: 0;
   text-align: center;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 600;
+  /* Nunca en dos líneas: si no cabe, puntos suspensivos. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .calendar__header button {
@@ -50,22 +65,27 @@
   gap: 0.35rem;
 }
 
-/* Enlace al código fuente, como un botón más de la cabecera. */
-.calendar__source {
+/* Actualizar desde la intra: solo el icono; gira mientras se cargan los datos. */
+.calendar__refresh {
   display: inline-flex;
   align-items: center;
   align-self: stretch;
-  padding: 0 0.55rem;
-  border: 1px solid var(--cal-border);
-  border-radius: 8px;
-  color: inherit;
-  opacity: 0.8;
 }
 
-.calendar__source:hover,
-.calendar__source:focus-visible {
-  border-color: var(--cal-accent);
-  opacity: 1;
+.calendar__refresh--busy svg {
+  animation: calendar-spin 0.9s linear infinite;
+}
+
+@keyframes calendar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar__refresh--busy svg {
+    animation: none;
+  }
 }
 
 /* Resultado de la exportación: cómo importar el fichero, o por qué no se pudo. */
@@ -200,15 +220,8 @@
     padding: 0.35rem 0.45rem;
   }
 
-  .calendar__source {
-    padding: 0 0.4rem;
-  }
 
   /* En móvil la cabecera no da para el texto: solo el icono. */
-  .calendar__export-label {
-    display: none;
-  }
-
   .calendar__note {
     margin: -0.25rem 0 0.5rem;
   }
@@ -236,5 +249,47 @@
 
   .calendar__marks {
     width: 1.5rem;
+  }
+}
+
+/* Teléfonos: la cabecera lleva seis botones. El título se encoge un poco y,
+   en los más estrechos, el mes va en corto ("Sept 2026") para que quepa. */
+.calendar__title-short {
+  display: none;
+}
+
+@media (max-width: 420px) {
+  .calendar__header {
+    gap: 0.2rem;
+  }
+
+  .calendar__title {
+    font-size: 0.92rem;
+  }
+}
+
+@media (max-width: 369px) {
+  .calendar__title-long {
+    display: none;
+  }
+
+  .calendar__title-short {
+    display: inline;
+  }
+}
+
+/* Escritorio con la barra lateral estrecha: la cabecera en dos líneas, el mes
+   con sus flechas arriba (entero) y los botones debajo. En móvil sigue en una. */
+@media (min-width: 900px) {
+  @container calendar (max-width: 400px) {
+    .calendar__header {
+      flex-wrap: wrap;
+      row-gap: 0.5rem;
+    }
+
+    .calendar__actions {
+      flex-basis: 100%;
+      justify-content: center;
+    }
   }
 }

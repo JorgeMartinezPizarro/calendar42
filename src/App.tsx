@@ -8,11 +8,12 @@ import LoginView from './components/LoginView.tsx'
 import ModeBar, { type Mode, type ModeNote, type ModeNotes } from './components/ModeBar.tsx'
 import ProjectPicker from './components/ProjectPicker.tsx'
 import SlotCreator, { type SlotAction, type SlotEdge } from './components/SlotCreator.tsx'
+import SourceLink from './components/SourceLink.tsx'
 import UserAvatar from './components/UserAvatar.tsx'
 import { clearSnapshots, loadSnapshot, saveSnapshot, type MonthAgenda } from './agendaCache.ts'
 import { isMine } from './agendaTypes.ts'
 import { fetchMe, logout, type LoggedIn, type Me } from './api/auth.ts'
-import { fetchAgenda, type Agenda } from './api/agenda.ts'
+import { fetchAgenda, refreshAgenda, type Agenda } from './api/agenda.ts'
 import { fetchUpcomingEvents, setEventSubscription, setExamSubscription } from './api/events.ts'
 import { isAbort, messageOf, statusOf } from './api/http.ts'
 import { fetchProjects } from './api/projects.ts'
@@ -310,7 +311,14 @@ function App() {
   // Slots libres de otros estudiantes para el proyecto cerrado elegido, por
   // proyecto y mes visible: { 'projectId:YYYY-M': { status, items, error } }.
   const [freeSlotsByKey, setFreeSlotsByKey] = useState<Record<string, FreeSlots>>({})
-  const freeProjectId = mode === 'corrections' && selectedProject?.closed ? selectedProject.projectId : null
+  // La API de 42 no da los slots libres reales de un proyecto (devuelve una
+  // muestra al azar distinta en cada petición), así que con una cuenta real la
+  // búsqueda está desactivada, con su motivo; el demo la conserva para enseñar
+  // cómo funcionaría. Si 42 da acceso a la disponibilidad real, basta con
+  // activarla aquí: la búsqueda y la reserva siguen implementadas.
+  const freeSlotsEnabled = Boolean(session?.demo)
+  const freeProjectId =
+    freeSlotsEnabled && mode === 'corrections' && selectedProject?.closed ? selectedProject.projectId : null
   const freeKey = freeProjectId ? `${freeProjectId}:${currentKey}` : null
   // Clave de las franjas que se están volviendo a buscar con el botón de refrescar.
   const [freeRefresh, setFreeRefresh] = useState<string | null>(null)
@@ -630,6 +638,48 @@ function App() {
     return () => clearTimeout(timer)
   }, [exportNote])
 
+  // ---- actualizar desde la intra ------------------------------------------
+  // Lo cambiado directamente en la intra (un slot borrado allí, por ejemplo) no
+  // llega hasta que caduca la caché: este botón la salta. Se piden de nuevo los
+  // meses que se ven, los próximos eventos y los proyectos; lo que se ve se
+  // mantiene mientras llega. El resto de meses se vuelve a pedir al visitarlos.
+  const [refreshing, setRefreshing] = useState(false)
+
+  const refreshAll = async () => {
+    if (!session || refreshing) return
+    setRefreshing(true)
+    try {
+      await refreshAgenda()
+      const keys = [...new Set([currentKey, todayKey, nextKey])]
+      const [months, events, projectItems] = await Promise.all([
+        Promise.all(
+          keys.map((key) => {
+            const { start, end } = rangeOfKey(key)
+            return fetchAgenda(start, end).then((data): [string, Agenda] => [key, data])
+          }),
+        ),
+        fetchUpcomingEvents(),
+        fetchProjects(),
+      ])
+      setAgendaByMonth(
+        Object.fromEntries(months.map(([key, { items, counts, warnings }]) => [key, { items, counts, warnings }])),
+      )
+      setUpcoming({ status: 'idle', items: events, error: null })
+      setProjects({ status: 'idle', items: projectItems, error: null })
+      setFreeSlotsByKey({})
+      setStatus('idle')
+      setError(null)
+    } catch (err) {
+      const message = loadFailure(err)
+      if (message !== null) {
+        setError(message)
+        setStatus('error')
+      }
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const exportCalendar = async () => {
     if (!session) return
     setExporting(true)
@@ -758,6 +808,7 @@ function App() {
           </span>
         )}
         <div className="app__user">
+          <SourceLink />
           {coalition && (
             <span className="coalition" title={t.app.coalitionTitle(coalition.name)}>
               <span className="coalition__emblem" aria-hidden="true">
@@ -776,8 +827,18 @@ function App() {
           <UserAvatar image={user.image} login={user.login} />
           <span className="app__login">{user.login}</span>
           <LanguageToggle />
-          <button type="button" className="app__logout" onClick={handleLogout}>
-            {t.app.logout}
+          <button
+            type="button"
+            className="app__logout"
+            onClick={handleLogout}
+            title={t.app.logout}
+            aria-label={t.app.logout}
+          >
+            {/* Puerta con flecha de salida. */}
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <path d="M6.5 2.5h-3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3" strokeLinecap="round" />
+              <path d="M10.5 11l3-3-3-3M13.5 8H6.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
         </div>
       </header>
@@ -791,6 +852,8 @@ function App() {
             onSelectDate={selectDate}
             dayTypes={dayTypes}
             onExport={exportCalendar}
+            onRefresh={refreshAll}
+            refreshing={refreshing}
             exporting={exporting}
             exportNote={exportNote}
           />
@@ -805,6 +868,7 @@ function App() {
               onSelect={setSelectedProjectId}
               freeSlots={freeSlots}
               onRefreshFreeSlots={refreshFreeSlots}
+              freeSlotsDisabledReason={freeSlotsEnabled ? null : t.projects.slotsDisabled}
             />
           )}
           {mode === 'exams' && (

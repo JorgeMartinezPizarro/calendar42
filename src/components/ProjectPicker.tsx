@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { t } from '../i18n/index.ts'
 import type { FreeSlots, Loadable, Project } from '../types.ts'
+import RefreshIcon from './RefreshIcon.tsx'
 import './ProjectPicker.css'
 
 // Grupos del desplegable, en este orden. Solo el primero es seleccionable.
@@ -37,16 +38,8 @@ interface ProjectPickerProps {
   freeSlots?: FreeSlots | null
   /** Volver a buscar los slots libres en la intra (botón junto al resultado). */
   onRefreshFreeSlots?: () => void
-}
-
-/** Flecha circular de refrescar. */
-function RefreshIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" strokeLinecap="round" />
-      <path d="M13.5 2.2v3.3h-3.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  /** Si la búsqueda de slots está desactivada, su motivo (en lugar del resultado). */
+  freeSlotsDisabledReason?: string | null
 }
 
 /**
@@ -63,6 +56,7 @@ function ProjectPicker({
   onSelect,
   freeSlots = null,
   onRefreshFreeSlots,
+  freeSlotsDisabledReason = null,
 }: ProjectPickerProps) {
   const listed = useMemo(() => projects.filter((p) => p.status !== 'finished'), [projects])
   const groups = useMemo(
@@ -109,7 +103,12 @@ function ProjectPicker({
               ? t.projects.closedCount(closedCount)
               : t.projects.closeOneHint}
         </p>
-        {selected?.closed && freeSlots && (
+        {selected?.closed && freeSlotsDisabledReason && (
+          <div className="projects__slots-row">
+            <p className="projects__slots projects__slots--reason">{freeSlotsDisabledReason}</p>
+          </div>
+        )}
+        {selected?.closed && !freeSlotsDisabledReason && freeSlots && (
           <div className="projects__slots-row">
             <p
               className={`projects__slots${freeSlots.error ? ' projects__slots--error' : ''}`}

@@ -530,6 +530,38 @@ function forgetPersonal(userId: number): void {
   cache.forget((key) => key.startsWith(`personal:${userId}:`) || key.startsWith(`pslots:${userId}:`))
 }
 
+// Botón de actualizar: como mucho una vez cada REFRESH_GAP_MS por usuario. Lo
+// del campus es caché compartida y el cupo de llamadas a la intra es de todos.
+const REFRESH_GAP_MS = 20_000
+const lastRefresh = new Map<number, number>()
+
+/**
+ * POST /api/refresh → olvida la caché del usuario (agenda, inscripciones,
+ * proyectos, slots libres) y la de su campus, para que lo cambiado
+ * directamente en la intra aparezca en la siguiente carga.
+ */
+app.post('/api/refresh', requireSession, (req, res) => {
+  const session = sessionOf(req)
+  if (session.demo) {
+    res.json({ ok: true })
+    return
+  }
+  const userId = session.user.id
+  const now = Date.now()
+  if (now - (lastRefresh.get(userId) ?? 0) >= REFRESH_GAP_MS) {
+    lastRefresh.set(userId, now)
+    const campusId = session.user.campusId ?? DEFAULT_CAMPUS_ID
+    forgetPersonal(userId)
+    cache.forget(
+      (key) =>
+        key === `projects:${userId}` ||
+        key.startsWith(`campus:${campusId}:`) ||
+        key.startsWith(`campus-events:${campusId}:`),
+    )
+  }
+  res.json({ ok: true })
+})
+
 /** Id numérico positivo de un parámetro de ruta, o null. */
 function idParam(req: Request): number | null {
   const id = Number(req.params.id)

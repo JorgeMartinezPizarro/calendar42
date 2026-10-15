@@ -30,7 +30,7 @@ Calendar42 une esas cuatro vías en una agenda: eventos, exámenes, slots y corr
 
 - **Vista del mes y del día**, con una marca de color por tipo y cada elemento en sus horas. Al pulsarlo se abre su ficha completa, con la descripción en Markdown como en la intra.
 - **Eventos**: todos los eventos futuros del campus, con los tuyos marcados. Te apuntas y te borras desde la ficha. Los externos van en un azul más claro y enlazan a su web de inscripción.
-- **Correcciones**: eliges un proyecto cerrado, ves en el calendario los huecos libres de otros estudiantes donde cabe su corrección (lo que dure la del proyecto), junto a tu propia agenda, y la reservas.
+- **Correcciones**: eliges un proyecto cerrado, ves en el calendario los huecos libres de otros estudiantes donde cabe su corrección (lo que dure la del proyecto), junto a tu propia agenda, y la reservas. Solo en el modo demo: con una cuenta real está desactivado, porque la API de 42 no da los slots libres reales (devuelve una muestra al azar en cada petición), y el motivo se muestra en su lugar.
 - **Exámenes**: los disponibles del próximo mes. La API de 42 no deja a los estudiantes inscribirse, así que el botón lo explica; en el modo demo sí funciona.
 - **Crear slots**: arrastrando con el ratón o tocando una hora con el dedo, ajustando con tiradores o en pasos de 15 minutos. Se respetan los 15 minutos libres que la intra exige entre slots.
 - **Sin solapes**: ninguna acción que añade algo a tu agenda (apuntarte, reservar, crear un slot) se permite si choca con lo que ya tienes. El botón sale desactivado con el motivo, y los errores de la intra se muestran junto a él.
@@ -69,7 +69,7 @@ Calendar42 utiliza la API de 42 como fuente de información para construir la ag
 | `GET /v2/users/:id/projects_users` | Proyectos del usuario y su estado (cerrado, en curso, finalizado); los exámenes se descartan por su slug | usuario |
 | `POST /v2/slots` | Abrir un slot de corrección propio (la intra lo trocea en bloques de 15 min) | usuario |
 | `DELETE /v2/slots/:id` | Borrar un bloque de slot propio | usuario |
-| `GET /v2/projects/:id/slots` | Slots libres de otros estudiantes para corregir un proyecto (anónimos, en bloques de 15 min); solo se ofrecen los huecos donde cabe la corrección | usuario |
+| `GET /v2/projects/:id/slots` | Slots libres para corregir un proyecto. La API devuelve una muestra al azar de bloques de 15 min, anónimos, distinta en cada petición, así que la búsqueda está desactivada con cuenta real | usuario |
 | `GET /v2/projects/:id/scale_teams` | Duración de la evaluación, en la escala de una corrección del proyecto (las escalas no se pueden leer con token de estudiante ni de app) | usuario |
 | `POST /v2/scale_teams` | Reservar una corrección (puede estar reservado al personal) | usuario |
 | `POST /oauth/revoke` | Revocar los tokens de una sesión al salir, al entrar de nuevo o al caducar | app |

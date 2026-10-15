@@ -34,6 +34,11 @@ export function formatMonthYear(date: Date): string {
   return capitalize(date.toLocaleDateString(t.locale, { month: 'long', year: 'numeric' }))
 }
 
+/** "Sept 2026": el mes en corto, para pantallas muy estrechas. */
+export function formatMonthYearShort(date: Date): string {
+  return capitalize(date.toLocaleDateString(t.locale, { month: 'short', year: 'numeric' }))
+}
+
 export function formatLongDate(date: Date): string {
   return capitalize(
     date.toLocaleDateString(t.locale, {
