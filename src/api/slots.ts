@@ -26,9 +26,11 @@ export async function fetchProjectSlots(
   projectId: number,
   from: Date,
   to: Date,
-  { signal }: { signal?: AbortSignal } = {},
+  { signal, refresh = false }: { signal?: AbortSignal; refresh?: boolean } = {},
 ): Promise<{ items: Item[]; evaluationMinutes: number | null }> {
   const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() })
+  // Refrescar: el servidor vuelve a preguntar a la intra en vez de usar su caché.
+  if (refresh) params.set('refresh', '1')
   const body = await request<{ items?: AgendaItem[]; evaluationMinutes?: number | null }>(
     `/api/projects/${projectId}/slots?${params}`,
     { signal, fallback: t.api.freeSlots },

@@ -238,6 +238,7 @@ export const es = {
     groupOpen: 'En curso, aún sin cerrar',
     notClosedYet: 'Hasta que cierres el proyecto no se puede agendar su corrección.',
     searchingSlots: 'Buscando slots libres…',
+    refresh: 'Volver a buscar slots libres',
     noFreeSlots: 'Ningún slot libre este mes para corregir este proyecto.',
     noFreeSlotsFor: (minutes: number) =>
       `Ningún hueco libre este mes donde quepa la corrección de este proyecto (${minutes} min).`,

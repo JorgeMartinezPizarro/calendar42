@@ -226,6 +226,7 @@ export const en: Messages = {
     groupOpen: 'In progress, not closed yet',
     notClosedYet: 'Its evaluation can be booked once you close the project.',
     searchingSlots: 'Looking for free slots…',
+    refresh: 'Search free slots again',
     noFreeSlots: 'No free slots this month to evaluate this project.',
     noFreeSlotsFor: (minutes) => `No free time this month long enough for this project's evaluation (${minutes} min).`,
     freeSlots: (n, minutes) =>

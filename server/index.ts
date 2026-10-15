@@ -125,7 +125,9 @@ const TTL_MS = {
   campus: 15 * 60_000,
   personal: 5 * 60_000,
   projects: 10 * 60_000,
-  freeSlots: 2 * 60_000,
+  // Los slots libres cambian en minutos (otros reservan y abren): la caché solo
+  // evita repetir la misma consulta casi a la vez, y nunca se sirve caducada.
+  freeSlots: 30_000,
 }
 const cache = createCache({ isLowBudget: intraBudgetLow })
 
@@ -660,7 +662,9 @@ app.get('/api/projects/:id/slots', requireSession, async (req, res) => {
   try {
     const token = await validAccessToken(session)
     const key = `pslots:${session.user.id}:${projectId}:${from.toISOString()}:${to.toISOString()}`
-    const { value } = await cache.cached(key, { ttlMs: TTL_MS.freeSlots }, () =>
+    // ?refresh=1 (botón de refrescar): se pregunta a la intra, sin la copia en caché.
+    if (req.query.refresh === '1') cache.forget((k) => k === key)
+    const { value } = await cache.cached(key, { ttlMs: TTL_MS.freeSlots, staleMs: TTL_MS.freeSlots }, () =>
       fetchProjectSlots(token, {
         projectId,
         userId: session.user.id,

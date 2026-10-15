@@ -35,6 +35,18 @@ interface ProjectPickerProps {
   onSelect: (id: number | null) => void
   /** Slots libres del elegido, o null. */
   freeSlots?: FreeSlots | null
+  /** Volver a buscar los slots libres en la intra (botón junto al resultado). */
+  onRefreshFreeSlots?: () => void
+}
+
+/** Flecha circular de refrescar. */
+function RefreshIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" strokeLinecap="round" />
+      <path d="M13.5 2.2v3.3h-3.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 /**
@@ -50,6 +62,7 @@ function ProjectPicker({
   selectedId = null,
   onSelect,
   freeSlots = null,
+  onRefreshFreeSlots,
 }: ProjectPickerProps) {
   const listed = useMemo(() => projects.filter((p) => p.status !== 'finished'), [projects])
   const groups = useMemo(
@@ -97,12 +110,26 @@ function ProjectPicker({
               : t.projects.closeOneHint}
         </p>
         {selected?.closed && freeSlots && (
-          <p
-            className={`projects__slots${freeSlots.error ? ' projects__slots--error' : ''}`}
-            role={freeSlots.error ? 'alert' : undefined}
-          >
-            {describeFreeSlots(freeSlots)}
-          </p>
+          <div className="projects__slots-row">
+            <p
+              className={`projects__slots${freeSlots.error ? ' projects__slots--error' : ''}`}
+              role={freeSlots.error ? 'alert' : undefined}
+            >
+              {describeFreeSlots(freeSlots)}
+            </p>
+            {onRefreshFreeSlots && (
+              <button
+                type="button"
+                className={`projects__refresh${freeSlots.status === 'loading' ? ' projects__refresh--busy' : ''}`}
+                onClick={onRefreshFreeSlots}
+                disabled={freeSlots.status === 'loading'}
+                title={t.projects.refresh}
+                aria-label={t.projects.refresh}
+              >
+                <RefreshIcon />
+              </button>
+            )}
+          </div>
         )}
       </>
     )

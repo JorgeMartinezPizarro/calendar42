@@ -312,16 +312,31 @@ function App() {
   const [freeSlotsByKey, setFreeSlotsByKey] = useState<Record<string, FreeSlots>>({})
   const freeProjectId = mode === 'corrections' && selectedProject?.closed ? selectedProject.projectId : null
   const freeKey = freeProjectId ? `${freeProjectId}:${currentKey}` : null
+  // Clave de las franjas que se están volviendo a buscar con el botón de refrescar.
+  const [freeRefresh, setFreeRefresh] = useState<string | null>(null)
+
+  // Refrescar: se mantienen las franjas que se ven mientras llega la respuesta.
+  const refreshFreeSlots = useCallback(() => {
+    if (!freeKey) return
+    setFreeRefresh(freeKey)
+    setFreeSlotsByKey((prev) => {
+      const current = prev[freeKey]
+      return current ? { ...prev, [freeKey]: { ...current, status: 'loading', error: null } } : prev
+    })
+  }, [freeKey])
 
   useEffect(() => {
-    if (!loggedIn || !freeKey || !freeProjectId || freeSlotsByKey[freeKey]) return
+    const refreshing = freeRefresh !== null && freeRefresh === freeKey
+    if (!loggedIn || !freeKey || !freeProjectId || (freeSlotsByKey[freeKey] && !refreshing)) return
     const controller = new AbortController()
     const { start, end } = getMonthGridRange(viewDate.getFullYear(), viewDate.getMonth())
-    fetchProjectSlots(freeProjectId, start, end, { signal: controller.signal })
-      .then(({ items, evaluationMinutes }) =>
-        setFreeSlotsByKey((prev) => ({ ...prev, [freeKey]: { status: 'idle', items, error: null, evaluationMinutes } })),
-      )
+    fetchProjectSlots(freeProjectId, start, end, { signal: controller.signal, refresh: refreshing })
+      .then(({ items, evaluationMinutes }) => {
+        setFreeSlotsByKey((prev) => ({ ...prev, [freeKey]: { status: 'idle', items, error: null, evaluationMinutes } }))
+        if (refreshing) setFreeRefresh(null)
+      })
       .catch((err: unknown) => {
+        if (refreshing && !isAbort(err)) setFreeRefresh(null)
         const message = loadFailure(err)
         if (message === null) return
         setFreeSlotsByKey((prev) => ({
@@ -331,7 +346,7 @@ function App() {
         if (statusOf(err) === 403) noteMode('corrections', 'reason', message)
       })
     return () => controller.abort()
-  }, [loggedIn, freeKey, freeProjectId, freeSlotsByKey, viewDate, noteMode, loadFailure])
+  }, [loggedIn, freeKey, freeProjectId, freeSlotsByKey, freeRefresh, viewDate, noteMode, loadFailure])
 
   const freeSlots = freeKey ? (freeSlotsByKey[freeKey] ?? LOADING) : null
   const freeItems = freeSlots?.items ?? EMPTY
@@ -789,6 +804,7 @@ function App() {
               selectedId={selectedProjectId}
               onSelect={setSelectedProjectId}
               freeSlots={freeSlots}
+              onRefreshFreeSlots={refreshFreeSlots}
             />
           )}
           {mode === 'exams' && (
