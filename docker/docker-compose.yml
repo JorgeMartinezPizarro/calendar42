@@ -29,8 +29,9 @@ services:
       # como redirect URI en la app OAuth. Se puede fijar en .env.
       APP_URL: ${PUBLIC_URL:-http://localhost:${PUBLIC_PORT:-3000}}
       FT_REDIRECT_URI: ${PUBLIC_URL:-http://localhost:${PUBLIC_PORT:-3000}}/api/auth/callback
+    # Solo en localhost: el acceso desde fuera pasa por el reverse proxy.
     ports:
-      - "${PUBLIC_PORT:-3000}:3000"
+      - "127.0.0.1:${PUBLIC_PORT:-3000}:3000"
     volumes:
       # Sesiones persistentes entre reinicios del contenedor.
       - calendar42-data:/data
